@@ -19,9 +19,6 @@
             >
               刷新额度
             </v-btn>
-            <v-btn class="toolbar-btn" :loading="acting" @click="store.importCurrentProfile()">
-              导入当前配置
-            </v-btn>
             <v-btn class="toolbar-btn" color="primary" :loading="acting" @click="store.openCreateApiDialog()">
               新增 API 配置
             </v-btn>
@@ -80,7 +77,7 @@
 
             <div v-if="!loading && !profiles.length" class="empty-block">
               <div class="empty-title">还没有托管配置</div>
-              <div class="empty-subtitle">可以先导入当前配置，或者直接新增一个 API 配置。</div>
+              <div class="empty-subtitle">可以先新增一个 API 配置，或先让工具自动识别当前配置。</div>
             </div>
 
             <v-table v-else class="profiles-table">
@@ -150,7 +147,7 @@
                   <td class="usage-column">{{ renderUsage(profile.rateLimits.secondary, profile.type) }}</td>
 
                   <td class="model-column">
-                    <div class="model-cell">{{ profile.model || '-' }}</div>
+                    <div class="model-cell" :title="profile.model || '-'">{{ profile.model || '-' }}</div>
                   </td>
 
                   <td class="status-column">
@@ -257,7 +254,7 @@ import { useAppStore } from './stores/app';
 import type { ProfileMeta, RateLimitWindow } from './types';
 
 const store = useAppStore();
-const { acting, current, loading, officialProfileIds, profiles, settings } = storeToRefs(store);
+const { acting, current, loading, officialProfileIds, profiles } = storeToRefs(store);
 
 const currentStatus = computed(() => {
   if (current.value.error) {
@@ -342,10 +339,10 @@ function planOrURL(profile: ProfileMeta) {
 
 function displayNameText(profile: ProfileMeta) {
   if (profile.type === 'api' && profile.maskedApiKey) {
-    return profile.maskedApiKey.replace(/\*{7,}/g, '******');
+    return profile.maskedApiKey.replace(/\*{7,}/g, '**********');
   }
 
-  return profile.displayName.replace(/\*{7,}/g, '******');
+  return profile.displayName.replace(/\*{7,}/g, '**********');
 }
 
 async function copyText(value?: string, message = '已复制到剪贴板') {

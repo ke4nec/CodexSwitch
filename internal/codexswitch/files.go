@@ -82,12 +82,12 @@ func maskAPIKey(apiKey string) string {
 		return ""
 	}
 	if len(apiKey) <= 8 {
-		return apiKey[:2] + "***" + apiKey[max(2, len(apiKey)-2):]
+		return apiKey[:2] + "**********" + apiKey[max(2, len(apiKey)-2):]
 	}
 	if len(apiKey) <= 12 {
-		return apiKey[:3] + "******" + apiKey[len(apiKey)-3:]
+		return apiKey[:3] + "**********" + apiKey[len(apiKey)-3:]
 	}
-	return apiKey[:6] + "******" + apiKey[len(apiKey)-4:]
+	return apiKey[:6] + "**********" + apiKey[len(apiKey)-4:]
 }
 
 func trimmedFirst(values ...string) string {

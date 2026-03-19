@@ -77,25 +77,6 @@ body {
   white-space: nowrap;
 }
 
-.path-badge {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 1 240px;
-  min-width: 140px;
-  max-width: 240px;
-  padding: 10px 14px;
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  font-size: 13px;
-  color: var(--app-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: copy;
-  user-select: none;
-}
-
 .toolbar-spacer {
   flex: 1 1 auto;
   min-width: 0;
@@ -237,22 +218,9 @@ body {
   font-weight: 700;
 }
 
-.panel-subtitle,
-.panel-meta,
-.secondary-line,
 .dialog-hint,
 .confirm-text {
   color: var(--app-muted);
-}
-
-.panel-subtitle {
-  margin-top: 4px;
-}
-
-.panel-meta {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  font-size: 13px;
 }
 
 .empty-block {
@@ -357,7 +325,20 @@ body {
 }
 
 .is-active-row {
-  background: linear-gradient(90deg, rgba(32, 79, 69, 0.12), rgba(32, 79, 69, 0.02)) !important;
+  background: linear-gradient(90deg, rgba(32, 79, 69, 0.22), rgba(32, 79, 69, 0.06)) !important;
+  box-shadow: inset 4px 0 0 #204f45, inset 0 0 0 1px rgba(32, 79, 69, 0.12);
+}
+
+.is-active-row td {
+  background: transparent !important;
+}
+
+.is-active-row .primary-name {
+  color: #10362f;
+}
+
+.is-active-row .updated-time {
+  color: #365b53;
 }
 
 .primary-cell {
@@ -372,13 +353,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.secondary-line {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
 }
 
 .plan-cell {

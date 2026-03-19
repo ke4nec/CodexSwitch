@@ -96,13 +96,6 @@ export const useAppStore = defineStore('app', {
       }
     },
 
-    async importCurrentProfile() {
-      await this.runAction(async () => {
-        this.appState = await backend.importCurrentProfile();
-        this.notify('当前配置已导入');
-      });
-    },
-
     openCreateApiDialog() {
       this.apiDialog = {
         open: true,
@@ -124,10 +117,6 @@ export const useAppStore = defineStore('app', {
       }, false);
     },
 
-    closeApiDialog() {
-      this.apiDialog.open = false;
-    },
-
     async saveApiProfile(form: APIProfileInput) {
       await this.runAction(async () => {
         if (this.apiDialog.mode === 'create') {
@@ -146,10 +135,6 @@ export const useAppStore = defineStore('app', {
         open: true,
         codexHomePath: this.settings.codexHomePath,
       };
-    },
-
-    closeSettingsDialog() {
-      this.settingsDialog.open = false;
     },
 
     async saveSettings(codexHomePath: string) {
@@ -182,10 +167,6 @@ export const useAppStore = defineStore('app', {
         confirmText: '确认删除',
         color: 'error',
       };
-    },
-
-    closeConfirmDialog() {
-      this.confirmDialog.open = false;
     },
 
     async submitConfirm() {
