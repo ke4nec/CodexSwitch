@@ -81,10 +81,13 @@ func maskAPIKey(apiKey string) string {
 	if apiKey == "" {
 		return ""
 	}
-	if len(apiKey) <= 10 {
-		return apiKey[:2] + strings.Repeat("*", max(0, len(apiKey)-4)) + apiKey[len(apiKey)-2:]
+	if len(apiKey) <= 8 {
+		return apiKey[:2] + "***" + apiKey[max(2, len(apiKey)-2):]
 	}
-	return apiKey[:6] + strings.Repeat("*", len(apiKey)-10) + apiKey[len(apiKey)-4:]
+	if len(apiKey) <= 12 {
+		return apiKey[:3] + "******" + apiKey[len(apiKey)-3:]
+	}
+	return apiKey[:6] + "******" + apiKey[len(apiKey)-4:]
 }
 
 func trimmedFirst(values ...string) string {

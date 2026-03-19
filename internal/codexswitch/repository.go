@@ -53,11 +53,14 @@ func (s *Service) loadProfile(id string) (storedProfile, error) {
 		return storedProfile{}, err
 	}
 
-	return storedProfile{
+	profile := storedProfile{
 		Meta:      meta,
 		AuthRaw:   authRaw,
 		ConfigRaw: configRaw,
-	}, nil
+	}
+
+	normalizeStoredProfileMeta(&profile)
+	return profile, nil
 }
 
 func (s *Service) loadAllProfiles() ([]ProfileMeta, error) {
@@ -147,4 +150,41 @@ func sortProfiles(profiles []ProfileMeta) {
 
 func isNotFound(err error) bool {
 	return errors.Is(err, os.ErrNotExist)
+}
+
+func normalizeStoredProfileMeta(profile *storedProfile) {
+	if profile == nil {
+		return
+	}
+
+	config := parseConfigTOML(profile.ConfigRaw)
+	if strings.TrimSpace(config.BaseURL) != "" {
+		profile.Meta.BaseURL = strings.TrimSpace(config.BaseURL)
+	}
+	if strings.TrimSpace(config.Model) != "" {
+		profile.Meta.Model = strings.TrimSpace(config.Model)
+	}
+	if strings.TrimSpace(config.ModelReasoningEffort) != "" {
+		profile.Meta.ModelReasoningEffort = strings.TrimSpace(config.ModelReasoningEffort)
+	}
+
+	if profile.Meta.Type != ProfileTypeAPI {
+		return
+	}
+
+	var auth authFile
+	if err := json.Unmarshal([]byte(profile.AuthRaw), &auth); err != nil {
+		return
+	}
+
+	apiKey := ""
+	if auth.OpenAIAPIKey != nil {
+		apiKey = strings.TrimSpace(*auth.OpenAIAPIKey)
+	}
+	if apiKey == "" {
+		return
+	}
+
+	profile.Meta.MaskedAPIKey = maskAPIKey(apiKey)
+	profile.Meta.DisplayName = trimmedFirst(profile.Meta.MaskedAPIKey, profile.Meta.BaseURL, "API 配置")
 }

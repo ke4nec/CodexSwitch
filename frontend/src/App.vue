@@ -1,150 +1,214 @@
 <template>
   <v-app>
-    <v-app-bar flat class="app-bar">
-      <div class="brand-block">
-        <div class="eyebrow">Codex configuration cockpit</div>
-        <div class="brand-title">CodexSwitch</div>
-      </div>
-
-      <div class="path-badge">
-        目标目录
-        <span>{{ settings.codexHomePath || '未设置' }}</span>
-      </div>
-
-      <v-spacer />
-
-      <div class="toolbar-actions">
-        <v-btn :loading="loading" @click="store.loadAppState(true)">刷新</v-btn>
-        <v-btn :disabled="!officialProfileIds.length" :loading="acting" @click="store.refreshRateLimits()">
-          刷新额度
-        </v-btn>
-        <v-btn :loading="acting" @click="store.importCurrentProfile()">导入当前配置</v-btn>
-        <v-btn color="primary" :loading="acting" @click="store.openCreateApiDialog()">新增 API 配置</v-btn>
-        <v-btn variant="outlined" :disabled="acting" @click="store.openSettingsDialog()">设置</v-btn>
-      </div>
-    </v-app-bar>
-
-    <v-main>
-      <v-container fluid class="page-shell">
-        <section class="hero-panel">
-          <div class="hero-copy">
-            <div class="hero-title">把官方账号和 API 配置都收拢到一个切换台里。</div>
-            <div class="hero-subtitle">
-              启动会自动识别当前配置，手动导入、编辑 API、切换和删除都在同一个页面完成。
-            </div>
-          </div>
-          <div class="hero-stats">
-            <div class="stat-card">
-              <div class="stat-label">托管配置</div>
-              <div class="stat-value">{{ profiles.length }}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">当前状态</div>
-              <div class="stat-value stat-sm">{{ currentStatus }}</div>
-            </div>
-          </div>
-        </section>
-
-        <v-alert
-          v-if="current.error"
-          type="warning"
-          variant="tonal"
-          class="status-alert"
-        >
-          {{ current.error }}
-        </v-alert>
-
-        <v-alert
-          v-else-if="current.available"
-          type="info"
-          variant="tonal"
-          class="status-alert"
-        >
-          当前目录中的配置已识别为
-          <strong>{{ current.displayName || '当前配置' }}</strong>
-          ，{{ current.managed ? '已纳入托管。' : '尚未托管，切换前会自动保护。' }}
-        </v-alert>
-
-        <section class="table-panel">
-          <div class="panel-head">
-            <div>
-              <div class="panel-title">托管配置列表</div>
-              <div class="panel-subtitle">官方配置展示 Plan 和额度，API 配置展示 Base URL 和脱敏后的 Key。</div>
-            </div>
-            <div class="panel-meta">最近打开：{{ formatDate(settings.lastOpenedAt) }}</div>
+    <div class="window-shell">
+      <header class="app-bar">
+        <div class="app-bar-inner">
+          <div class="brand-block">
+            <div class="brand-title">CodexSwitch</div>
           </div>
 
-          <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
+          <div class="toolbar-spacer" />
 
-          <div v-if="!loading && !profiles.length" class="empty-block">
-            <div class="empty-title">还没有托管配置</div>
-            <div class="empty-subtitle">可以先导入当前配置，或者直接新增一个 API 配置。</div>
+          <div class="toolbar-actions">
+            <v-btn class="toolbar-btn" :loading="loading" @click="store.loadAppState(true)">刷新</v-btn>
+            <v-btn
+              class="toolbar-btn"
+              :disabled="!officialProfileIds.length"
+              :loading="acting"
+              @click="store.refreshRateLimits()"
+            >
+              刷新额度
+            </v-btn>
+            <v-btn class="toolbar-btn" :loading="acting" @click="store.importCurrentProfile()">
+              导入当前配置
+            </v-btn>
+            <v-btn class="toolbar-btn" color="primary" :loading="acting" @click="store.openCreateApiDialog()">
+              新增 API 配置
+            </v-btn>
+            <v-btn class="toolbar-btn" variant="outlined" :disabled="acting" @click="store.openSettingsDialog()">
+              设置
+            </v-btn>
           </div>
+        </div>
+      </header>
 
-          <v-table v-else class="profiles-table">
-            <thead>
-              <tr>
-                <th>显示名</th>
-                <th>类型</th>
-                <th>Plan / URL</th>
-                <th>5h usage</th>
-                <th>weekly usage</th>
-                <th>模型</th>
-                <th>状态</th>
-                <th>最后同步</th>
-                <th class="actions-column">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="profile in profiles" :key="profile.id" :class="{ 'is-active-row': profile.isActive }">
-                <td>
-                  <div class="primary-cell">
-                    <div class="primary-name">{{ profile.displayName }}</div>
-                    <div class="secondary-line">
-                      <span v-if="profile.email">{{ profile.email }}</span>
-                      <span v-else-if="profile.maskedApiKey">{{ profile.maskedApiKey }}</span>
-                      <span v-else>{{ profile.id }}</span>
+      <main class="main-shell">
+        <div class="page-shell">
+          <section class="hero-panel">
+            <div class="hero-summary">
+              <div class="hero-title">统一管理 Codex 账号与 API 配置</div>
+              <div class="hero-subtitle">
+                启动自动识别当前配置，支持托管、切换、编辑 API、刷新额度和快速回滚。
+              </div>
+            </div>
+
+            <div class="hero-stats">
+              <div class="stat-card">
+                <div class="stat-label">托管配置</div>
+                <div class="stat-value">{{ profiles.length }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">当前状态</div>
+                <div class="stat-value stat-sm">{{ currentStatus }}</div>
+              </div>
+            </div>
+          </section>
+
+          <v-alert v-if="current.error" type="warning" variant="tonal" class="status-alert">
+            {{ current.error }}
+          </v-alert>
+
+          <v-alert
+            v-else-if="current.available"
+            type="info"
+            variant="tonal"
+            class="status-alert"
+          >
+            当前目录中的配置已识别为
+            <strong>{{ current.displayName || '当前配置' }}</strong>
+            ，{{ current.managed ? '已纳入托管。' : '尚未托管，切换前会自动保护。' }}
+          </v-alert>
+
+          <section class="table-panel">
+            <div class="panel-head">
+              <div class="panel-head-copy">
+                <div class="panel-title">托管配置列表</div>
+              </div>
+            </div>
+
+            <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
+
+            <div v-if="!loading && !profiles.length" class="empty-block">
+              <div class="empty-title">还没有托管配置</div>
+              <div class="empty-subtitle">可以先导入当前配置，或者直接新增一个 API 配置。</div>
+            </div>
+
+            <v-table v-else class="profiles-table">
+              <colgroup>
+                <col class="col-display-name" />
+                <col class="col-type" />
+                <col class="col-plan" />
+                <col class="col-usage" />
+                <col class="col-usage" />
+                <col class="col-model" />
+                <col class="col-status" />
+                <col class="col-updated" />
+                <col class="col-actions" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="display-name-column">显示名</th>
+                  <th class="type-column">类型</th>
+                  <th class="plan-column">Plan / URL</th>
+                  <th class="usage-column">5h</th>
+                  <th class="usage-column">weekly</th>
+                  <th class="model-column">模型</th>
+                  <th class="status-column">状态</th>
+                  <th class="updated-column">最后同步</th>
+                  <th class="actions-column">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="profile in profiles"
+                  :key="profile.id"
+                  :class="{ 'is-active-row': profile.isActive }"
+                >
+                  <td class="display-name-column">
+                    <div class="primary-cell">
+                      <div class="primary-name" :title="displayNameText(profile)">
+                        {{ displayNameText(profile) }}
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td>
-                  <v-chip size="small" :color="profile.type === 'official' ? 'secondary' : 'primary'" variant="flat">
-                    {{ profile.type === 'official' ? '官方' : profile.type === 'api' ? 'API' : '未知' }}
-                  </v-chip>
-                </td>
-                <td>{{ profile.type === 'official' ? profile.planType || '-' : profile.baseURL || '-' }}</td>
-                <td>{{ renderUsage(profile.rateLimits.primary, profile.type) }}</td>
-                <td>{{ renderUsage(profile.rateLimits.secondary, profile.type) }}</td>
-                <td>{{ profile.model || '-' }}</td>
-                <td>
-                  <v-chip size="small" :color="statusColor(profile)" variant="tonal">
-                    {{ statusText(profile) }}
-                  </v-chip>
-                </td>
-                <td>{{ formatDate(profile.updatedAt) }}</td>
-                <td class="actions-column">
-                  <div class="row-actions">
-                    <v-btn size="small" variant="text" :disabled="acting" @click="store.askSwitch(profile.id)">切换</v-btn>
-                    <v-btn
-                      v-if="profile.type === 'api'"
-                      size="small"
-                      variant="text"
-                      :disabled="acting"
-                      @click="store.openEditApiDialog(profile)"
-                    >
-                      编辑
-                    </v-btn>
-                    <v-btn size="small" variant="text" color="error" :disabled="acting" @click="store.askDelete(profile.id)">
-                      删除
-                    </v-btn>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </v-table>
-        </section>
-      </v-container>
-    </v-main>
+                  </td>
+
+                  <td class="type-column">
+                    <v-chip size="small" :color="profile.type === 'official' ? 'secondary' : 'primary'" variant="flat">
+                      {{ profile.type === 'official' ? '官方' : profile.type === 'api' ? 'API' : '未知' }}
+                    </v-chip>
+                  </td>
+
+                  <td class="plan-column">
+                    <template v-if="planOrURL(profile) !== '-'">
+                      <v-tooltip location="top">
+                        <template #activator="{ props }">
+                          <div
+                            v-bind="props"
+                            class="plan-cell"
+                            @contextmenu.prevent="copyText(planOrURL(profile), '已复制到剪贴板')"
+                          >
+                            {{ planOrURL(profile) }}
+                          </div>
+                        </template>
+                        <span>{{ planOrURL(profile) }}</span>
+                      </v-tooltip>
+                    </template>
+                    <span v-else class="plan-cell plan-cell-empty">-</span>
+                  </td>
+
+                  <td class="usage-column">{{ renderUsage(profile.rateLimits.primary, profile.type) }}</td>
+                  <td class="usage-column">{{ renderUsage(profile.rateLimits.secondary, profile.type) }}</td>
+
+                  <td class="model-column">
+                    <div class="model-cell">{{ profile.model || '-' }}</div>
+                  </td>
+
+                  <td class="status-column">
+                    <v-chip size="small" :color="statusColor(profile)" variant="tonal">
+                      {{ statusText(profile) }}
+                    </v-chip>
+                  </td>
+
+                  <td class="updated-column">
+                    <div class="updated-cell">
+                      <span class="updated-date">{{ formatDateParts(profile.updatedAt).date }}</span>
+                      <span class="updated-time">{{ formatDateParts(profile.updatedAt).time }}</span>
+                    </div>
+                  </td>
+
+                  <td class="actions-column">
+                    <div class="row-actions">
+                      <v-btn
+                        size="small"
+                        density="compact"
+                        variant="text"
+                        class="row-action-btn"
+                        :disabled="acting"
+                        @click="store.askSwitch(profile.id)"
+                      >
+                        切换
+                      </v-btn>
+                      <v-btn
+                        v-if="profile.type === 'api'"
+                        size="small"
+                        density="compact"
+                        variant="text"
+                        class="row-action-btn"
+                        :disabled="acting"
+                        @click="store.openEditApiDialog(profile)"
+                      >
+                        编辑
+                      </v-btn>
+                      <v-btn
+                        size="small"
+                        density="compact"
+                        variant="text"
+                        color="error"
+                        class="row-action-btn"
+                        :disabled="acting"
+                        @click="store.askDelete(profile.id)"
+                      >
+                        删除
+                      </v-btn>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </section>
+        </div>
+      </main>
+    </div>
 
     <ApiProfileDialog
       v-model="store.apiDialog.open"
@@ -239,24 +303,74 @@ function renderUsage(window: RateLimitWindow | undefined, type: ProfileMeta['typ
   if (!window) {
     return '未获取';
   }
-  const duration = window.windowDurationMins ? ` / ${window.windowDurationMins}m` : '';
-  return `${window.usedPercent}%${duration}`;
+  return `${window.usedPercent}%`;
 }
 
-function formatDate(value?: string) {
+function formatDateParts(value?: string) {
   if (!value) {
-    return '-';
+    return {
+      date: '-',
+      time: '--:--',
+    };
   }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return {
+      date: value,
+      time: '',
+    };
   }
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+
+  return {
+    date: date.toLocaleDateString('zh-CN', {
+      year: '2-digit',
+      month: '2-digit',
+      day: '2-digit',
+    }),
+    time: date.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
+  };
+}
+
+function planOrURL(profile: ProfileMeta) {
+  return profile.type === 'official' ? profile.planType || '-' : profile.baseURL || '-';
+}
+
+function displayNameText(profile: ProfileMeta) {
+  if (profile.type === 'api' && profile.maskedApiKey) {
+    return profile.maskedApiKey.replace(/\*{7,}/g, '******');
+  }
+
+  return profile.displayName.replace(/\*{7,}/g, '******');
+}
+
+async function copyText(value?: string, message = '已复制到剪贴板') {
+  if (!value || value === '-') {
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = value;
+      textArea.setAttribute('readonly', 'true');
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    }
+
+    store.notify(message);
+  } catch (error) {
+    store.notify(store.formatError(error), 'error');
+  }
 }
 </script>

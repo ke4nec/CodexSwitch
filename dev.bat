@@ -49,6 +49,8 @@ call wails version >nul 2>&1 || (
   exit /b 1
 )
 
-echo [STEP] wails dev%WAILS_ARGS%
-call wails dev%WAILS_ARGS%
+echo [STEP] wails dev -s%WAILS_ARGS%
+echo [STEP] frontend changes: Vite HMR
+echo [STEP] backend Go changes: Wails rebuild and relaunch
+call wails dev -s%WAILS_ARGS%
 exit /b %ERRORLEVEL%

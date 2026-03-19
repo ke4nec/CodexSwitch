@@ -33,6 +33,7 @@ go install github.com/wailsapp/wails/v2/cmd/wails@latest
 - `dev.bat`
 - `build.bat`
 - `release.bat`
+- `clean.bat`
 
 ## 常用用法
 
@@ -47,6 +48,10 @@ bootstrap.bat
 ```cmd
 dev.bat
 ```
+
+`dev.bat` 会启动 `wails dev`，并显式接入 `http://127.0.0.1:34115` 的 Vite 开发服务器。
+前端页面和样式改动会通过 Vite HMR 热加载，不需要手工重新编译桌面程序。
+Go 后端文件改动会由 Wails 自动检测，然后重编译并重启应用。
 
 只检查调试环境，不真正启动：
 
@@ -78,6 +83,18 @@ release.bat -SkipWails
 release.bat
 ```
 
+清理构建产物：
+
+```cmd
+clean.bat
+```
+
+彻底清理，包括 `node_modules`：
+
+```cmd
+clean.bat -All
+```
+
 额外参数会透传给 `wails`：
 
 ```cmd
@@ -93,7 +110,9 @@ release.bat -platform windows/amd64
 - `dev.bat`
   - 检查 Go / npm / Wails
   - 自动补齐前端依赖
-  - 执行 `wails dev`
+  - 执行 `wails dev -s`
+  - 前端改动走 Vite HMR
+  - `.go` 文件改动走 Wails 自动重编译和重启
 - `build.bat`
   - 执行 `go test ./...`
   - 执行 `go build ./...`
@@ -104,6 +123,13 @@ release.bat -platform windows/amd64
   - 执行 `go build ./...`
   - 执行 `frontend` 的 `npm run build`
   - 执行 `wails build -clean`
+- `clean.bat`
+  - 删除 `build`
+  - 删除 `frontend/dist`
+  - 删除 `frontend/wailsjs`
+  - 删除 `frontend/.vite`
+  - 删除 `frontend/package.json.md5`
+  - 可选删除 `frontend/node_modules`
 
 ## 直接命令
 

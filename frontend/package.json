@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:wails": "vite --host 127.0.0.1 --port 34115 --strictPort --clearScreen false",
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {

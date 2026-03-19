@@ -6,6 +6,7 @@ frontend/dist/
 frontend/dist/assets/
 frontend/wailsjs/
 frontend/package.json.md5
+frontend/.vite/
 *.exe
 *.dll
 *.so

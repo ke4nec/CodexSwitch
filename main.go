@@ -16,9 +16,11 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:  "CodexSwitch",
-		Width:  1440,
-		Height: 960,
+		Title:     "CodexSwitch",
+		Width:     1280,
+		Height:    1024,
+		MinWidth:  1200,
+		MinHeight: 864,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

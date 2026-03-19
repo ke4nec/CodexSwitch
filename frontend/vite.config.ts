@@ -10,7 +10,17 @@ export default defineConfig({
     }),
   ],
   server: {
+    host: '127.0.0.1',
     port: 34115,
     strictPort: true,
+    hmr: {
+      host: '127.0.0.1',
+      port: 34115,
+      protocol: 'ws',
+    },
+    watch: {
+      usePolling: true,
+      interval: 120,
+    },
   },
 });
