@@ -1,0 +1,14 @@
+bin/
+build/
+dist/
+frontend/node_modules/
+frontend/dist/assets/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+coverage.out
+
+conf/
+codext/

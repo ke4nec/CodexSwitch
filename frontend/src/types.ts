@@ -1,0 +1,73 @@
+export type ProfileType = 'official' | 'api' | 'unknown';
+export type RateLimitFetchStatus = 'idle' | 'loading' | 'success' | 'stale' | 'error';
+
+export interface AppSettings {
+  codexHomePath: string;
+  lastOpenedAt: string;
+}
+
+export interface RateLimitWindow {
+  usedPercent: number;
+  windowDurationMins?: number;
+  resetsAt?: number;
+}
+
+export interface RateLimitState {
+  primary?: RateLimitWindow;
+  secondary?: RateLimitWindow;
+  status: RateLimitFetchStatus;
+  errorMessage?: string;
+}
+
+export interface ProfileMeta {
+  id: string;
+  type: ProfileType;
+  displayName: string;
+  stableKeyHash: string;
+  email?: string;
+  emailVerified: boolean;
+  planType?: string;
+  chatgptUserId?: string;
+  chatgptAccountId?: string;
+  clientId?: string;
+  baseURL?: string;
+  maskedApiKey?: string;
+  model?: string;
+  modelReasoningEffort?: string;
+  source: string;
+  isActive: boolean;
+  isValid: boolean;
+  contentHash: string;
+  createdAt: string;
+  updatedAt: string;
+  lastRateLimitFetchAt?: string;
+  rateLimits: RateLimitState;
+}
+
+export interface CurrentProfileState {
+  path: string;
+  available: boolean;
+  managed: boolean;
+  profileId?: string;
+  type: ProfileType;
+  displayName?: string;
+  contentHash?: string;
+  error?: string;
+}
+
+export interface AppState {
+  settings: AppSettings;
+  current: CurrentProfileState;
+  profiles: ProfileMeta[];
+}
+
+export interface APIProfileInput {
+  baseURL: string;
+  model: string;
+  modelReasoningEffort: string;
+  apiKey: string;
+}
+
+export interface UpdateSettingsInput {
+  codexHomePath: string;
+}
