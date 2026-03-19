@@ -182,10 +182,6 @@ body {
   font-weight: 800;
 }
 
-.stat-sm {
-  font-size: 18px;
-}
-
 .status-alert {
   flex: 0 0 auto;
   margin-bottom: 0;

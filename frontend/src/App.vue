@@ -17,7 +17,16 @@
               :loading="acting"
               @click="store.refreshRateLimits()"
             >
-              刷新额度
+              刷新全部额度
+            </v-btn>
+            <v-btn
+              class="toolbar-btn"
+              variant="outlined"
+              :loading="importingOfficialFile"
+              :disabled="importingOfficialFile"
+              @click="store.importOfficialProfileFile()"
+            >
+              导入账号文件
             </v-btn>
             <v-btn class="toolbar-btn" color="primary" :loading="acting" @click="store.openCreateApiDialog()">
               新增 API 配置
@@ -46,7 +55,7 @@
               </div>
               <div class="stat-card">
                 <div class="stat-label">当前状态</div>
-                <div class="stat-value stat-sm">{{ currentStatus }}</div>
+                <div class="stat-value">{{ currentStatus }}</div>
               </div>
             </div>
           </section>
@@ -176,6 +185,18 @@
                         切换
                       </v-btn>
                       <v-btn
+                        v-if="profile.type === 'official'"
+                        size="small"
+                        density="compact"
+                        variant="text"
+                        class="row-action-btn"
+                        :loading="isProfileRefreshing(profile.id)"
+                        :disabled="acting || isProfileRefreshing(profile.id)"
+                        @click="store.refreshProfileRateLimit(profile)"
+                      >
+                        刷新
+                      </v-btn>
+                      <v-btn
                         v-if="profile.type === 'api'"
                         size="small"
                         density="compact"
@@ -254,7 +275,7 @@ import { useAppStore } from './stores/app';
 import type { ProfileMeta, RateLimitWindow } from './types';
 
 const store = useAppStore();
-const { acting, current, loading, officialProfileIds, profiles } = storeToRefs(store);
+const { acting, current, importingOfficialFile, loading, officialProfileIds, profiles, refreshingProfileIds } = storeToRefs(store);
 
 const currentStatus = computed(() => {
   if (current.value.error) {
@@ -343,6 +364,10 @@ function displayNameText(profile: ProfileMeta) {
   }
 
   return profile.displayName.replace(/\*{7,}/g, '**********');
+}
+
+function isProfileRefreshing(profileId: string) {
+  return refreshingProfileIds.value.includes(profileId);
 }
 
 async function copyText(value?: string, message = '已复制到剪贴板') {

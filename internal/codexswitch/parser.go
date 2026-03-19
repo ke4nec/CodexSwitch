@@ -55,8 +55,13 @@ type accessTokenClaims struct {
 }
 
 func buildProfileSnapshot(authRaw, configRaw, source string, now time.Time) (*profileSnapshot, error) {
+	normalizedAuthRaw, _, err := normalizeAuthJSON(authRaw)
+	if err != nil {
+		return nil, err
+	}
+
 	var auth authFile
-	if err := json.Unmarshal([]byte(authRaw), &auth); err != nil {
+	if err := json.Unmarshal([]byte(normalizedAuthRaw), &auth); err != nil {
 		return nil, fmt.Errorf("auth.json 解析失败: %w", err)
 	}
 
@@ -69,7 +74,7 @@ func buildProfileSnapshot(authRaw, configRaw, source string, now time.Time) (*pr
 		BaseURL:              strings.TrimSpace(config.BaseURL),
 		Source:               source,
 		IsValid:              profileType != ProfileTypeUnknown,
-		ContentHash:          computeContentHash(authRaw, configRaw),
+		ContentHash:          computeContentHash(normalizedAuthRaw, configRaw),
 		CreatedAt:            now.UTC().Format(time.RFC3339),
 		UpdatedAt:            now.UTC().Format(time.RFC3339),
 		RateLimits: RateLimitState{
@@ -97,7 +102,7 @@ func buildProfileSnapshot(authRaw, configRaw, source string, now time.Time) (*pr
 
 	return &profileSnapshot{
 		Meta:      meta,
-		AuthRaw:   authRaw,
+		AuthRaw:   normalizedAuthRaw,
 		ConfigRaw: configRaw,
 	}, nil
 }

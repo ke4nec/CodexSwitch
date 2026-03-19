@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
+	"strings"
 
 	"codexswitch/internal/codexswitch"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
@@ -38,6 +41,30 @@ func (a *App) GetAppState() (codexswitch.AppState, error) {
 
 func (a *App) ImportCurrentProfile() (codexswitch.AppState, error) {
 	return a.service.ImportCurrentProfile()
+}
+
+func (a *App) ImportOfficialProfileFile() (codexswitch.AppState, error) {
+	if a.ctx == nil {
+		return codexswitch.AppState{}, errors.New("Wails runtime 未就绪")
+	}
+
+	selectedFile, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "选择官方账号文件",
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "JSON Files (*.json)",
+				Pattern:     "*.json",
+			},
+		},
+	})
+	if err != nil {
+		return codexswitch.AppState{}, err
+	}
+	if strings.TrimSpace(selectedFile) == "" {
+		return codexswitch.AppState{}, errors.New("已取消文件选择")
+	}
+
+	return a.service.ImportOfficialProfileFile(selectedFile)
 }
 
 func (a *App) CreateApiProfile(input codexswitch.APIProfileInput) (codexswitch.AppState, error) {

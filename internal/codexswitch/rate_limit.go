@@ -38,18 +38,7 @@ func (s *Service) refreshProfileRateLimit(profile storedProfile) (storedProfile,
 	}
 
 	config := parseConfigTOML(profile.ConfigRaw)
-	baseURL := strings.TrimSpace(config.BaseURL)
-	if baseURL == "" {
-		baseURL = "https://chatgpt.com/backend-api"
-	}
-	baseURL = strings.TrimRight(baseURL, "/")
-
-	var usageURL string
-	if strings.Contains(baseURL, "/backend-api") {
-		usageURL = baseURL + "/wham/usage"
-	} else {
-		usageURL = baseURL + "/api/codex/usage"
-	}
+	usageURL := officialUsageURL(config.BaseURL)
 
 	req, err := http.NewRequest(http.MethodGet, usageURL, nil)
 	if err != nil {
@@ -89,6 +78,27 @@ func (s *Service) refreshProfileRateLimit(profile storedProfile) (storedProfile,
 	profile.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 
 	return profile, nil
+}
+
+func officialUsageURL(baseURL string) string {
+	baseURL = normalizeOfficialBaseURL(baseURL)
+	if strings.Contains(baseURL, "/backend-api") {
+		return baseURL + "/wham/usage"
+	}
+	return baseURL + "/api/codex/usage"
+}
+
+func normalizeOfficialBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return "https://chatgpt.com/backend-api"
+	}
+
+	if (strings.HasPrefix(baseURL, "https://chatgpt.com") || strings.HasPrefix(baseURL, "https://chat.openai.com")) &&
+		!strings.Contains(baseURL, "/backend-api") {
+		return baseURL + "/backend-api"
+	}
+	return baseURL
 }
 
 func convertRateLimitWindow(details *rateLimitDetails, primary bool) *RateLimitWindow {

@@ -1,12 +1,99 @@
 package codexswitch
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestNormalizeStandardOfficialAuthAddsDefaults(t *testing.T) {
+	authRaw := mustReadSample(t, "codex", "auth.json")
+
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(authRaw), &root); err != nil {
+		t.Fatalf("unmarshal official sample failed: %v", err)
+	}
+	delete(root, "auth_mode")
+	delete(root, "OPENAI_API_KEY")
+
+	trimmedRaw, err := marshalCanonicalJSON(root)
+	if err != nil {
+		t.Fatalf("marshal trimmed official auth failed: %v", err)
+	}
+
+	normalizedRaw, inputFormat, err := normalizeAuthJSON(trimmedRaw)
+	if err != nil {
+		t.Fatalf("normalizeAuthJSON returned error: %v", err)
+	}
+	if inputFormat != officialAuthInputFormatStandard {
+		t.Fatalf("expected standard format, got %s", inputFormat)
+	}
+
+	var normalized map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(normalizedRaw), &normalized); err != nil {
+		t.Fatalf("unmarshal normalized auth failed: %v", err)
+	}
+
+	authMode, ok := optionalJSONStringField(normalized, "auth_mode")
+	if !ok || authMode != officialAuthModeTemplate {
+		t.Fatalf("expected auth_mode=%q, got %q", officialAuthModeTemplate, authMode)
+	}
+	if rawValue, ok := normalized["OPENAI_API_KEY"]; !ok || strings.TrimSpace(string(rawValue)) != "null" {
+		t.Fatalf("expected OPENAI_API_KEY=null, got %s", string(rawValue))
+	}
+}
+
+func TestNormalizeCLIOfficialAuthSample(t *testing.T) {
+	authRaw := mustReadSample(t, "codex", "cli-auth.json")
+
+	normalizedRaw, inputFormat, err := normalizeAuthJSON(authRaw)
+	if err != nil {
+		t.Fatalf("normalizeAuthJSON returned error: %v", err)
+	}
+	if inputFormat != officialAuthInputFormatCLI {
+		t.Fatalf("expected cli format, got %s", inputFormat)
+	}
+	if strings.Contains(normalizedRaw, "\"access_token\":") && !strings.Contains(normalizedRaw, "\"tokens\":") {
+		t.Fatalf("expected CLI auth to be wrapped into tokens: %s", normalizedRaw)
+	}
+
+	snapshot, err := buildProfileSnapshot(normalizedRaw, mustReadSample(t, "codex", "config.toml"), profileSourceImportedFileCLI, time.Date(2026, 3, 19, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if snapshot.Meta.Type != ProfileTypeOfficial {
+		t.Fatalf("expected official profile, got %s", snapshot.Meta.Type)
+	}
+	if snapshot.Meta.Email != "codex_001@proton.me" {
+		t.Fatalf("unexpected email: %s", snapshot.Meta.Email)
+	}
+}
+
+func TestNormalizeCLIOfficialAuthRejectsMissingSensitiveField(t *testing.T) {
+	authRaw := mustReadSample(t, "codex", "cli-auth.json")
+
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(authRaw), &root); err != nil {
+		t.Fatalf("unmarshal CLI sample failed: %v", err)
+	}
+	delete(root, "refresh_token")
+
+	trimmedRaw, err := marshalCanonicalJSON(root)
+	if err != nil {
+		t.Fatalf("marshal broken CLI auth failed: %v", err)
+	}
+
+	_, _, err = normalizeAuthJSON(trimmedRaw)
+	if err == nil {
+		t.Fatal("expected normalizeAuthJSON to fail when refresh_token is missing")
+	}
+	if !strings.Contains(err.Error(), "refresh_token") {
+		t.Fatalf("expected refresh_token error, got %v", err)
+	}
+}
 
 func TestBuildProfileSnapshotOfficialSample(t *testing.T) {
 	authRaw := mustReadSample(t, "codex", "auth.json")

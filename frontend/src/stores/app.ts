@@ -32,6 +32,8 @@ export const useAppStore = defineStore('app', {
     appState: emptyAppState as AppState,
     loading: false,
     acting: false,
+    importingOfficialFile: false,
+    refreshingProfileIds: [] as string[],
     snackbar: {
       show: false,
       text: '',
@@ -77,9 +79,6 @@ export const useAppStore = defineStore('app', {
 
     async bootstrap() {
       await this.loadAppState(false);
-      if (this.officialProfileIds.length > 0) {
-        void this.refreshRateLimits(false);
-      }
     },
 
     async loadAppState(showSuccess = false) {
@@ -115,6 +114,21 @@ export const useAppStore = defineStore('app', {
           form,
         };
       }, false);
+    },
+
+    async importOfficialProfileFile() {
+      this.importingOfficialFile = true;
+      try {
+        this.appState = await backend.importOfficialProfileFile();
+        this.notify('官方账号文件已导入');
+      } catch (error) {
+        const message = this.formatError(error);
+        if (!message.includes('已取消文件选择')) {
+          this.notify(message, 'error');
+        }
+      } finally {
+        this.importingOfficialFile = false;
+      }
     },
 
     async saveApiProfile(form: APIProfileInput) {
@@ -194,9 +208,30 @@ export const useAppStore = defineStore('app', {
       await this.runAction(async () => {
         this.appState = await backend.refreshRateLimits(this.officialProfileIds);
         if (showSuccess) {
-          this.notify('额度信息已刷新');
+          this.notify('全部官方账号额度已刷新');
         }
       }, showSuccess);
+    },
+
+    async refreshProfileRateLimit(profile: ProfileMeta, showSuccess = true) {
+      if (profile.type !== 'official') {
+        return;
+      }
+      if (this.refreshingProfileIds.includes(profile.id)) {
+        return;
+      }
+
+      this.refreshingProfileIds = [...this.refreshingProfileIds, profile.id];
+      try {
+        this.appState = await backend.refreshRateLimits([profile.id]);
+        if (showSuccess) {
+          this.notify(`${profile.displayName || '官方账号'} 额度已刷新`);
+        }
+      } catch (error) {
+        this.notify(this.formatError(error), 'error');
+      } finally {
+        this.refreshingProfileIds = this.refreshingProfileIds.filter((id) => id !== profile.id);
+      }
     },
 
     async runAction(action: () => Promise<void>, notifyOnError = true) {

@@ -34,6 +34,37 @@ func TestGetAppStateAutoImportsCurrentProfile(t *testing.T) {
 	}
 }
 
+func TestGetAppStateAutoImportsCurrentCLIProfile(t *testing.T) {
+	service := newTestService(t)
+	codexHome := prepareCodexHomeWithFiles(t, "codex", "cli-auth.json", "config.toml")
+	if err := service.saveSettings(AppSettings{CodexHomePath: codexHome}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	state, err := service.GetAppState()
+	if err != nil {
+		t.Fatalf("GetAppState returned error: %v", err)
+	}
+
+	if len(state.Profiles) != 1 {
+		t.Fatalf("expected 1 profile, got %d", len(state.Profiles))
+	}
+	if state.Current.Type != ProfileTypeOfficial {
+		t.Fatalf("expected official current type, got %s", state.Current.Type)
+	}
+	if state.Profiles[0].Source != profileSourceImportedCurrent {
+		t.Fatalf("expected imported_current source, got %s", state.Profiles[0].Source)
+	}
+
+	stored, err := service.loadProfile(state.Profiles[0].ID)
+	if err != nil {
+		t.Fatalf("loadProfile failed: %v", err)
+	}
+	if !strings.Contains(stored.AuthRaw, "\"tokens\"") {
+		t.Fatalf("expected stored auth to be normalized official auth: %s", stored.AuthRaw)
+	}
+}
+
 func TestCreateAndSwitchAPIProfile(t *testing.T) {
 	service := newTestService(t)
 	codexHome := prepareCodexHome(t, "codex")
@@ -90,6 +121,77 @@ func TestCreateAndSwitchAPIProfile(t *testing.T) {
 	}
 	if state.Current.Type != ProfileTypeAPI {
 		t.Fatalf("expected current type api after switch, got %s", state.Current.Type)
+	}
+}
+
+func TestImportOfficialProfileFileFromCLIAndSwitch(t *testing.T) {
+	service := newTestService(t)
+	codexHome := t.TempDir()
+	if err := service.saveSettings(AppSettings{CodexHomePath: codexHome}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	cliPath := samplePath("codex", "cli-auth.json")
+	state, err := service.ImportOfficialProfileFile(cliPath)
+	if err != nil {
+		t.Fatalf("ImportOfficialProfileFile returned error: %v", err)
+	}
+
+	if len(state.Profiles) != 1 {
+		t.Fatalf("expected 1 imported profile, got %d", len(state.Profiles))
+	}
+
+	imported := state.Profiles[0]
+	if imported.Type != ProfileTypeOfficial {
+		t.Fatalf("expected official profile, got %s", imported.Type)
+	}
+	if imported.Source != profileSourceImportedFileCLI {
+		t.Fatalf("expected CLI import source, got %s", imported.Source)
+	}
+
+	stored, err := service.loadProfile(imported.ID)
+	if err != nil {
+		t.Fatalf("loadProfile failed: %v", err)
+	}
+	if strings.TrimSpace(stored.ConfigRaw) != strings.TrimSpace(officialConfigTemplate) {
+		t.Fatalf("expected official config template, got %s", stored.ConfigRaw)
+	}
+	if strings.Contains(stored.AuthRaw, "\"type\": \"codex\"") {
+		t.Fatalf("expected normalized auth, got raw CLI file: %s", stored.AuthRaw)
+	}
+	if !strings.Contains(stored.AuthRaw, "\"tokens\"") {
+		t.Fatalf("expected normalized auth to contain tokens: %s", stored.AuthRaw)
+	}
+
+	state, err = service.ImportOfficialProfileFile(cliPath)
+	if err != nil {
+		t.Fatalf("second ImportOfficialProfileFile returned error: %v", err)
+	}
+	if len(state.Profiles) != 1 {
+		t.Fatalf("expected import dedupe to keep 1 profile, got %d", len(state.Profiles))
+	}
+
+	state, err = service.SwitchProfile(imported.ID)
+	if err != nil {
+		t.Fatalf("SwitchProfile returned error: %v", err)
+	}
+
+	authRaw, err := os.ReadFile(filepath.Join(codexHome, "auth.json"))
+	if err != nil {
+		t.Fatalf("read switched auth.json failed: %v", err)
+	}
+	configRaw, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("read switched config.toml failed: %v", err)
+	}
+	if !strings.Contains(string(authRaw), "\"tokens\"") {
+		t.Fatalf("expected switched auth.json to be standard official auth: %s", string(authRaw))
+	}
+	if strings.TrimSpace(string(configRaw)) != strings.TrimSpace(officialConfigTemplate) {
+		t.Fatalf("unexpected switched config.toml: %s", string(configRaw))
+	}
+	if state.Current.Type != ProfileTypeOfficial {
+		t.Fatalf("expected current type official after switch, got %s", state.Current.Type)
 	}
 }
 
@@ -184,6 +286,74 @@ base_url = "%s/backend-api"
 	}
 }
 
+func TestImportOfficialProfileFileRefreshesRateLimits(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/backend-api/wham/usage" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if !strings.HasPrefix(request.Header.Get("Authorization"), "Bearer ") {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{
+		  "plan_type": "pro",
+		  "rate_limit": {
+		    "primary_window": {
+		      "used_percent": 18,
+		      "limit_window_seconds": 300,
+		      "reset_at": 1730947200
+		    },
+		    "secondary_window": {
+		      "used_percent": 3,
+		      "limit_window_seconds": 10080,
+		      "reset_at": 1731547200
+		    }
+		  }
+		}`))
+	}))
+	defer server.Close()
+
+	service := newTestServiceWithHTTP(t, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	state, err := service.ImportOfficialProfileFile(samplePath("codex", "auth.json"))
+	if err != nil {
+		t.Fatalf("ImportOfficialProfileFile returned error: %v", err)
+	}
+	if len(state.Profiles) != 1 {
+		t.Fatalf("expected 1 imported profile, got %d", len(state.Profiles))
+	}
+
+	stored, err := service.loadProfile(state.Profiles[0].ID)
+	if err != nil {
+		t.Fatalf("loadProfile failed: %v", err)
+	}
+	stored.ConfigRaw = fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/backend-api"
+`, server.URL)
+	updatedSnapshot, err := buildProfileSnapshot(stored.AuthRaw, stored.ConfigRaw, stored.Meta.Source, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot failed: %v", err)
+	}
+	if err := service.saveProfileSnapshot(updatedSnapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err = service.RefreshRateLimits([]string{state.Profiles[0].ID})
+	if err != nil {
+		t.Fatalf("RefreshRateLimits returned error: %v", err)
+	}
+	if state.Profiles[0].RateLimits.Primary == nil || state.Profiles[0].RateLimits.Primary.UsedPercent != 18 {
+		t.Fatalf("unexpected rate limits after refresh: %+v", state.Profiles[0].RateLimits)
+	}
+}
+
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 	return newTestServiceWithHTTP(t, &http.Client{Timeout: 5 * time.Second})
@@ -213,6 +383,14 @@ func prepareCodexHome(t *testing.T, sampleDir string) string {
 	return root
 }
 
+func prepareCodexHomeWithFiles(t *testing.T, sampleDir, authFileName, configFileName string) string {
+	t.Helper()
+	root := t.TempDir()
+	writeFileFromSample(t, filepath.Join(root, "auth.json"), sampleDir, authFileName)
+	writeFileFromSample(t, filepath.Join(root, "config.toml"), sampleDir, configFileName)
+	return root
+}
+
 func writeFileFromSample(t *testing.T, targetPath string, sampleParts ...string) {
 	t.Helper()
 
@@ -220,4 +398,9 @@ func writeFileFromSample(t *testing.T, targetPath string, sampleParts ...string)
 	if err := os.WriteFile(targetPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("write sample file failed: %v", err)
 	}
+}
+
+func samplePath(parts ...string) string {
+	allParts := append([]string{"..", "..", "conf"}, parts...)
+	return filepath.Join(allParts...)
 }

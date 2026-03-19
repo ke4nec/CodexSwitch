@@ -3,6 +3,7 @@ import type { APIProfileInput, AppState, UpdateSettingsInput } from '../types';
 interface BackendAPI {
   GetAppState(): Promise<AppState>;
   ImportCurrentProfile(): Promise<AppState>;
+  ImportOfficialProfileFile(): Promise<AppState>;
   CreateApiProfile(input: APIProfileInput): Promise<AppState>;
   UpdateApiProfile(id: string, input: APIProfileInput): Promise<AppState>;
   GetApiProfileInput(id: string): Promise<APIProfileInput>;
@@ -33,6 +34,7 @@ function appBridge(): BackendAPI {
 export const backend = {
   getAppState: () => appBridge().GetAppState(),
   importCurrentProfile: () => appBridge().ImportCurrentProfile(),
+  importOfficialProfileFile: () => appBridge().ImportOfficialProfileFile(),
   createApiProfile: (input: APIProfileInput) => appBridge().CreateApiProfile(input),
   updateApiProfile: (id: string, input: APIProfileInput) => appBridge().UpdateApiProfile(id, input),
   getApiProfileInput: (id: string) => appBridge().GetApiProfileInput(id),

@@ -42,7 +42,7 @@ func (s *Service) buildAPIProfile(input APIProfileInput) (*profileSnapshot, erro
 	authRaw := string(authBody) + "\n"
 	configRaw := renderAPIConfig(input)
 
-	return buildProfileSnapshot(authRaw, configRaw, "created_api_form", s.now())
+	return buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, s.now())
 }
 
 func normalizeAPIProfileInput(input APIProfileInput) APIProfileInput {

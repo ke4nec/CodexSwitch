@@ -378,7 +378,7 @@ func (s *Service) scanCurrentProfile(codexHomePath string) (CurrentProfileState,
 		return state, nil
 	}
 
-	snapshot, err := buildProfileSnapshot(authRaw, configRaw, "imported_current", s.now())
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceImportedCurrent, s.now())
 	state.Available = true
 	if err != nil {
 		state.Error = err.Error()
