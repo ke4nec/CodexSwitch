@@ -153,7 +153,15 @@
                             class="plan-cell"
                             @contextmenu.prevent="copyText(planOrURL(profile), '已复制到剪贴板')"
                           >
-                            {{ planOrURL(profile) }}
+                            <template v-if="profile.type === 'api'">
+                              <span
+                                class="plan-host"
+                                :class="`plan-host-${apiURLDisplay(profile).protocolTone}`"
+                              >
+                                {{ apiURLDisplay(profile).host }}
+                              </span>
+                            </template>
+                            <span v-else class="plan-text">{{ planOrURL(profile) }}</span>
                           </div>
                         </template>
                         <span>{{ planOrURL(profile) }}</span>
@@ -504,6 +512,54 @@ function formatDateTime(value?: string) {
     second: '2-digit',
     hour12: false,
   })}`;
+}
+
+type URLProtocolTone = 'http' | 'https' | 'other';
+
+interface URLDisplay {
+  host: string;
+  protocolTone: URLProtocolTone;
+}
+
+function apiURLDisplay(profile: ProfileMeta): URLDisplay {
+  return formatURLDisplay(profile.baseURL);
+}
+
+function formatURLDisplay(value?: string): URLDisplay {
+  const fullValue = value?.trim();
+  if (!fullValue) {
+    return {
+      host: '-',
+      protocolTone: 'other',
+    };
+  }
+
+  const fallbackHost = fullValue.replace(/^[a-z][a-z\d+.-]*:\/\//i, '').split(/[/?#]/, 1)[0] || fullValue;
+
+  try {
+    const parsed = new URL(fullValue);
+    const normalizedProtocol = parsed.protocol.replace(/:$/, '').toLowerCase();
+
+    return {
+      host: parsed.host || fallbackHost,
+      protocolTone: normalizedProtocol === 'http' || normalizedProtocol === 'https' ? normalizedProtocol : 'other',
+    };
+  } catch {
+    const matched = fullValue.match(/^(https?):\/\/([^/?#]+)/i);
+    if (matched) {
+      const protocol = matched[1].toLowerCase() as Extract<URLProtocolTone, 'http' | 'https'>;
+
+      return {
+        host: matched[2],
+        protocolTone: protocol,
+      };
+    }
+
+    return {
+      host: fallbackHost,
+      protocolTone: 'other',
+    };
+  }
 }
 
 function planOrURL(profile: ProfileMeta) {

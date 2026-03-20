@@ -360,13 +360,36 @@ body {
   display: block;
   max-width: 400px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: copy;
   user-select: none;
 }
 
+.plan-text,
+.plan-host {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-host {
+  font-weight: 600;
+}
+
+.plan-host-http {
+  color: #9f3a38;
+}
+
+.plan-host-https {
+  color: #166756;
+}
+
+.plan-host-other {
+  color: #526070;
+}
+
 .plan-cell-empty {
+  display: block;
   cursor: default;
   user-select: text;
 }

@@ -27,6 +27,37 @@ const defaultApiForm = (): APIProfileInput => ({
   apiKey: '',
 });
 
+function profileLatencySortBucket(profile: ProfileMeta) {
+  const latencyMs = profile.latencyTest.latencyMs;
+  if (profile.latencyTest.status !== 'success' || typeof latencyMs !== 'number' || latencyMs <= 0) {
+    return 2;
+  }
+  return profile.latencyTest.available ? 0 : 1;
+}
+
+function sortProfilesForDisplay(profiles: ProfileMeta[]) {
+  return profiles
+    .map((profile, index) => ({ profile, index }))
+    .sort((left, right) => {
+      const leftBucket = profileLatencySortBucket(left.profile);
+      const rightBucket = profileLatencySortBucket(right.profile);
+      if (leftBucket !== rightBucket) {
+        return leftBucket - rightBucket;
+      }
+
+      if (leftBucket < 2) {
+        const leftLatency = left.profile.latencyTest.latencyMs ?? Number.MAX_SAFE_INTEGER;
+        const rightLatency = right.profile.latencyTest.latencyMs ?? Number.MAX_SAFE_INTEGER;
+        if (leftLatency !== rightLatency) {
+          return leftLatency - rightLatency;
+        }
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ profile }) => profile);
+}
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     appState: emptyAppState as AppState,
@@ -63,7 +94,7 @@ export const useAppStore = defineStore('app', {
   }),
 
   getters: {
-    profiles: (state) => state.appState.profiles,
+    profiles: (state) => sortProfilesForDisplay(state.appState.profiles),
     current: (state) => state.appState.current,
     settings: (state) => state.appState.settings,
     officialProfileIds: (state) =>
