@@ -80,6 +80,9 @@ func buildProfileSnapshot(authRaw, configRaw, source string, now time.Time) (*pr
 		RateLimits: RateLimitState{
 			Status: RateLimitStatusIdle,
 		},
+		LatencyTest: LatencyTestState{
+			Status: LatencyTestStatusIdle,
+		},
 	}
 
 	switch profileType {

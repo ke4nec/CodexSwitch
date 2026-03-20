@@ -10,6 +10,7 @@ interface BackendAPI {
   SwitchProfile(id: string): Promise<AppState>;
   DeleteProfile(id: string): Promise<AppState>;
   RefreshRateLimits(ids: string[]): Promise<AppState>;
+  RefreshApiLatencyTests(ids: string[]): Promise<AppState>;
   UpdateSettings(input: UpdateSettingsInput): Promise<AppState>;
 }
 
@@ -41,5 +42,6 @@ export const backend = {
   switchProfile: (id: string) => appBridge().SwitchProfile(id),
   deleteProfile: (id: string) => appBridge().DeleteProfile(id),
   refreshRateLimits: (ids: string[]) => appBridge().RefreshRateLimits(ids),
+  refreshApiLatencyTests: (ids: string[]) => appBridge().RefreshApiLatencyTests(ids),
   updateSettings: (input: UpdateSettingsInput) => appBridge().UpdateSettings(input),
 };

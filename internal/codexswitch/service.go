@@ -248,7 +248,6 @@ func (s *Service) RefreshRateLimits(ids []string) (AppState, error) {
 		updated, err := s.refreshProfileRateLimit(stored)
 		if err != nil {
 			s.logger.Warn("refresh rate limits failed", "id", meta.ID, "error", err)
-			updated = stored
 			if updated.Meta.RateLimits.Primary != nil || updated.Meta.RateLimits.Secondary != nil {
 				updated.Meta.RateLimits.Status = RateLimitStatusStale
 			} else {
@@ -260,7 +259,62 @@ func (s *Service) RefreshRateLimits(ids []string) (AppState, error) {
 
 		if err := s.saveProfileSnapshot(s.buildSnapshotFromExistingProfile(updated)); err != nil {
 			s.logger.Warn("save rate limits failed", "id", meta.ID, "error", err)
+			continue
 		}
+		s.syncActiveProfileToCurrentCodexHome(stored, updated)
+	}
+
+	return s.syncAndBuildState(false)
+}
+
+func (s *Service) RefreshAPILatencyTests(ids []string) (AppState, error) {
+	if err := s.ensureAppLayout(); err != nil {
+		return AppState{}, err
+	}
+
+	targetSet := map[string]bool{}
+	for _, id := range ids {
+		if strings.TrimSpace(id) != "" {
+			targetSet[id] = true
+		}
+	}
+
+	profiles, err := s.loadAllProfiles()
+	if err != nil {
+		return AppState{}, err
+	}
+
+	for _, meta := range profiles {
+		if meta.Type != ProfileTypeAPI && meta.Type != ProfileTypeOfficial {
+			continue
+		}
+		if len(targetSet) > 0 && !targetSet[meta.ID] {
+			continue
+		}
+
+		stored, err := s.loadProfile(meta.ID)
+		if err != nil {
+			s.logger.Warn("load profile for latency tests failed", "id", meta.ID, "error", err)
+			continue
+		}
+
+		updated, err := s.refreshProfileLatencyTest(stored)
+		if err != nil {
+			s.logger.Warn("refresh latency tests failed", "id", meta.ID, "error", err)
+			updated.Meta.LatencyTest = LatencyTestState{
+				Status:       LatencyTestStatusError,
+				Available:    false,
+				ErrorMessage: err.Error(),
+				CheckedAt:    s.now().UTC().Format(time.RFC3339),
+			}
+			updated.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+		}
+
+		if err := s.saveProfileSnapshot(s.buildSnapshotFromExistingProfile(updated)); err != nil {
+			s.logger.Warn("save latency tests failed", "id", meta.ID, "error", err)
+			continue
+		}
+		s.syncActiveProfileToCurrentCodexHome(stored, updated)
 	}
 
 	return s.syncAndBuildState(false)

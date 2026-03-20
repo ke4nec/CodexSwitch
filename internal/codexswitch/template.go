@@ -86,6 +86,13 @@ func (s *Service) buildSnapshotFromExistingProfile(profile storedProfile) *profi
 }
 
 func preserveStoredFields(next *ProfileMeta, existing *ProfileMeta, now time.Time) {
+	if next.RateLimits.Status == "" {
+		next.RateLimits.Status = RateLimitStatusIdle
+	}
+	if next.LatencyTest.Status == "" {
+		next.LatencyTest.Status = LatencyTestStatusIdle
+	}
+
 	if existing == nil {
 		next.CreatedAt = now.UTC().Format(time.RFC3339)
 		next.UpdatedAt = now.UTC().Format(time.RFC3339)
@@ -100,4 +107,29 @@ func preserveStoredFields(next *ProfileMeta, existing *ProfileMeta, now time.Tim
 	if next.RateLimits.Status == RateLimitStatusIdle && next.RateLimits.Primary == nil && next.RateLimits.Secondary == nil {
 		next.RateLimits = existing.RateLimits
 	}
+	if shouldPreserveLatencyTest(next, existing) {
+		next.LatencyTest = existing.LatencyTest
+	}
+}
+
+func shouldPreserveLatencyTest(next *ProfileMeta, existing *ProfileMeta) bool {
+	if next == nil || existing == nil {
+		return false
+	}
+	if next.ContentHash != existing.ContentHash {
+		return false
+	}
+	if next.LatencyTest.Status != LatencyTestStatusIdle {
+		return false
+	}
+	if next.LatencyTest.Available {
+		return false
+	}
+	if next.LatencyTest.LatencyMs != nil || next.LatencyTest.StatusCode != nil {
+		return false
+	}
+	if strings.TrimSpace(next.LatencyTest.ErrorMessage) != "" || strings.TrimSpace(next.LatencyTest.CheckedAt) != "" {
+		return false
+	}
+	return true
 }

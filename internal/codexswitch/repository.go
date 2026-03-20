@@ -156,6 +156,12 @@ func normalizeStoredProfileMeta(profile *storedProfile) {
 	if profile == nil {
 		return
 	}
+	if profile.Meta.RateLimits.Status == "" {
+		profile.Meta.RateLimits.Status = RateLimitStatusIdle
+	}
+	if profile.Meta.LatencyTest.Status == "" {
+		profile.Meta.LatencyTest.Status = LatencyTestStatusIdle
+	}
 
 	config := parseConfigTOML(profile.ConfigRaw)
 	if strings.TrimSpace(config.BaseURL) != "" {

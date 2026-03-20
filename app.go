@@ -91,6 +91,10 @@ func (a *App) RefreshRateLimits(ids []string) (codexswitch.AppState, error) {
 	return a.service.RefreshRateLimits(ids)
 }
 
+func (a *App) RefreshApiLatencyTests(ids []string) (codexswitch.AppState, error) {
+	return a.service.RefreshAPILatencyTests(ids)
+}
+
 func (a *App) UpdateSettings(input codexswitch.UpdateSettingsInput) (codexswitch.AppState, error) {
 	return a.service.UpdateSettings(input)
 }

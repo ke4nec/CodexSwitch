@@ -9,13 +9,20 @@ import (
 )
 
 type rateLimitPayload struct {
-	PlanType  string            `json:"plan_type"`
-	RateLimit *rateLimitDetails `json:"rate_limit"`
+	PlanType             string                    `json:"plan_type"`
+	RateLimit            *rateLimitDetails         `json:"rate_limit"`
+	AdditionalRateLimits []additionalRateLimitInfo `json:"additional_rate_limits"`
 }
 
 type rateLimitDetails struct {
 	PrimaryWindow   *rateLimitWindowPayload `json:"primary_window"`
 	SecondaryWindow *rateLimitWindowPayload `json:"secondary_window"`
+}
+
+type additionalRateLimitInfo struct {
+	LimitName      string            `json:"limit_name"`
+	MeteredFeature string            `json:"metered_feature"`
+	RateLimit      *rateLimitDetails `json:"rate_limit"`
 }
 
 type rateLimitWindowPayload struct {
@@ -24,9 +31,21 @@ type rateLimitWindowPayload struct {
 	ResetAt            int64 `json:"reset_at"`
 }
 
+type rateLimitWindowCandidate struct {
+	Source string
+	Window *rateLimitWindowPayload
+}
+
 func (s *Service) refreshProfileRateLimit(profile storedProfile) (storedProfile, error) {
 	if profile.Meta.Type != ProfileTypeOfficial {
 		return profile, nil
+	}
+
+	refreshedProfile, err := s.refreshOfficialProfileAuth(profile)
+	if err != nil {
+		s.logger.Warn("refresh official token before rate limit fetch failed", "id", profile.Meta.ID, "error", err)
+	} else {
+		profile = refreshedProfile
 	}
 
 	var auth authFile
@@ -65,9 +84,10 @@ func (s *Service) refreshProfileRateLimit(profile storedProfile) (storedProfile,
 		return profile, fmt.Errorf("额度接口返回解析失败: %w", err)
 	}
 
+	primary, secondary := resolveRateLimitWindows(payload)
 	profile.Meta.RateLimits = RateLimitState{
-		Primary:   convertRateLimitWindow(payload.RateLimit, true),
-		Secondary: convertRateLimitWindow(payload.RateLimit, false),
+		Primary:   primary,
+		Secondary: secondary,
 		Status:    RateLimitStatusSuccess,
 	}
 	profile.Meta.RateLimits.ErrorMessage = ""
@@ -101,30 +121,95 @@ func normalizeOfficialBaseURL(baseURL string) string {
 	return baseURL
 }
 
-func convertRateLimitWindow(details *rateLimitDetails, primary bool) *RateLimitWindow {
+func resolveRateLimitWindows(payload rateLimitPayload) (*RateLimitWindow, *RateLimitWindow) {
+	candidates := collectRateLimitWindowCandidates(payload)
+	primary := findRateLimitWindowByDuration(candidates, 300)
+	secondary := findRateLimitWindowByDuration(candidates, 10080)
+
+	if primary == nil {
+		primary = fallbackRateLimitWindow(candidates, "primary", 10080, secondary != nil)
+	}
+	if secondary == nil {
+		secondary = fallbackRateLimitWindow(candidates, "secondary", 300, primary != nil)
+	}
+
+	return primary, secondary
+}
+
+func collectRateLimitWindowCandidates(payload rateLimitPayload) []rateLimitWindowCandidate {
+	candidates := make([]rateLimitWindowCandidate, 0, 2+len(payload.AdditionalRateLimits)*2)
+	candidates = appendRateLimitWindowCandidates(candidates, payload.RateLimit)
+	for _, additional := range payload.AdditionalRateLimits {
+		candidates = appendRateLimitWindowCandidates(candidates, additional.RateLimit)
+	}
+	return candidates
+}
+
+func appendRateLimitWindowCandidates(candidates []rateLimitWindowCandidate, details *rateLimitDetails) []rateLimitWindowCandidate {
 	if details == nil {
-		return nil
+		return candidates
 	}
-	var window *rateLimitWindowPayload
-	if primary {
-		window = details.PrimaryWindow
-	} else {
-		window = details.SecondaryWindow
+	if details.PrimaryWindow != nil {
+		candidates = append(candidates, rateLimitWindowCandidate{
+			Source: "primary",
+			Window: details.PrimaryWindow,
+		})
 	}
+	if details.SecondaryWindow != nil {
+		candidates = append(candidates, rateLimitWindowCandidate{
+			Source: "secondary",
+			Window: details.SecondaryWindow,
+		})
+	}
+	return candidates
+}
+
+func findRateLimitWindowByDuration(candidates []rateLimitWindowCandidate, wantedMinutes int64) *RateLimitWindow {
+	for _, candidate := range candidates {
+		if windowDurationMinutes(candidate.Window) == wantedMinutes {
+			return convertRateLimitPayloadWindow(candidate.Window)
+		}
+	}
+	return nil
+}
+
+func fallbackRateLimitWindow(
+	candidates []rateLimitWindowCandidate,
+	fallbackSource string,
+	excludedMinutes int64,
+	excludeMatchedDuration bool,
+) *RateLimitWindow {
+	for _, candidate := range candidates {
+		if candidate.Source != fallbackSource {
+			continue
+		}
+		if excludeMatchedDuration && windowDurationMinutes(candidate.Window) == excludedMinutes {
+			continue
+		}
+		return convertRateLimitPayloadWindow(candidate.Window)
+	}
+	return nil
+}
+
+func convertRateLimitPayloadWindow(window *rateLimitWindowPayload) *RateLimitWindow {
 	if window == nil {
 		return nil
 	}
 
-	duration := int64(0)
-	if window.LimitWindowSeconds > 0 {
-		duration = (window.LimitWindowSeconds + 59) / 60
-	}
+	duration := windowDurationMinutes(window)
 	resetsAt := window.ResetAt
 	return &RateLimitWindow{
 		UsedPercent:        window.UsedPercent,
 		WindowDurationMins: optionalInt64(duration),
 		ResetsAt:           optionalInt64(resetsAt),
 	}
+}
+
+func windowDurationMinutes(window *rateLimitWindowPayload) int64 {
+	if window == nil || window.LimitWindowSeconds <= 0 {
+		return 0
+	}
+	return (window.LimitWindowSeconds + 59) / 60
 }
 
 func optionalInt64(value int64) *int64 {

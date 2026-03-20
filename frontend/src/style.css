@@ -299,12 +299,16 @@ body {
   width: 72px;
 }
 
+.col-latency {
+  width: 118px;
+}
+
 .col-updated {
   width: 112px;
 }
 
 .col-actions {
-  width: 184px;
+  width: 228px;
 }
 
 .display-name-column,
@@ -312,6 +316,7 @@ body {
 .usage-column,
 .model-column,
 .status-column,
+.latency-column,
 .updated-column {
   white-space: nowrap;
 }
@@ -380,7 +385,7 @@ body {
   flex-wrap: nowrap;
   gap: 4px;
   width: 100%;
-  min-width: 168px;
+  min-width: 220px;
 }
 
 .row-action-btn {
@@ -408,6 +413,20 @@ body {
 .updated-time {
   color: var(--app-muted);
   font-size: 12px;
+}
+
+.latency-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.latency-hint,
+.latency-empty {
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 1.1;
 }
 
 .actions-column {

@@ -1,5 +1,6 @@
 export type ProfileType = 'official' | 'api' | 'unknown';
 export type RateLimitFetchStatus = 'idle' | 'loading' | 'success' | 'stale' | 'error';
+export type LatencyTestStatus = 'idle' | 'success' | 'error';
 
 export interface AppSettings {
   codexHomePath: string;
@@ -17,6 +18,15 @@ export interface RateLimitState {
   secondary?: RateLimitWindow;
   status: RateLimitFetchStatus;
   errorMessage?: string;
+}
+
+export interface LatencyTestState {
+  status: LatencyTestStatus;
+  available: boolean;
+  latencyMs?: number;
+  statusCode?: number;
+  errorMessage?: string;
+  checkedAt?: string;
 }
 
 export interface ProfileMeta {
@@ -42,6 +52,7 @@ export interface ProfileMeta {
   updatedAt: string;
   lastRateLimitFetchAt?: string;
   rateLimits: RateLimitState;
+  latencyTest: LatencyTestState;
 }
 
 export interface CurrentProfileState {

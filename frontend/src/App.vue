@@ -21,6 +21,14 @@
             </v-btn>
             <v-btn
               class="toolbar-btn"
+              :disabled="!latencyProfileIds.length || testingAllLatency"
+              :loading="testingAllLatency"
+              @click="store.testAllProfileLatency()"
+            >
+              全部测试
+            </v-btn>
+            <v-btn
+              class="toolbar-btn"
               variant="outlined"
               :loading="importingOfficialFile"
               :disabled="importingOfficialFile"
@@ -98,6 +106,7 @@
                 <col class="col-usage" />
                 <col class="col-model" />
                 <col class="col-status" />
+                <col class="col-latency" />
                 <col class="col-updated" />
                 <col class="col-actions" />
               </colgroup>
@@ -110,6 +119,7 @@
                   <th class="usage-column">weekly</th>
                   <th class="model-column">模型</th>
                   <th class="status-column">状态</th>
+                  <th class="latency-column">延迟测试</th>
                   <th class="updated-column">最后同步</th>
                   <th class="actions-column">操作</th>
                 </tr>
@@ -165,6 +175,23 @@
                     </v-chip>
                   </td>
 
+                  <td class="latency-column">
+                    <template v-if="profile.type === 'official' || profile.type === 'api'">
+                      <v-tooltip location="top" :disabled="!latencyTooltip(profile)">
+                        <template #activator="{ props }">
+                          <div v-bind="props" class="latency-cell">
+                            <v-chip size="small" :color="latencyColor(profile)" variant="tonal">
+                              {{ latencyPrimaryText(profile) }}
+                            </v-chip>
+                            <span class="latency-hint">{{ latencySecondaryText(profile) }}</span>
+                          </div>
+                        </template>
+                        <span>{{ latencyTooltip(profile) }}</span>
+                      </v-tooltip>
+                    </template>
+                    <span v-else class="latency-empty">-</span>
+                  </td>
+
                   <td class="updated-column">
                     <div class="updated-cell">
                       <span class="updated-date">{{ formatDateParts(profile.updatedAt).date }}</span>
@@ -183,6 +210,18 @@
                         @click="store.askSwitch(profile.id)"
                       >
                         切换
+                      </v-btn>
+                      <v-btn
+                        v-if="profile.type === 'official' || profile.type === 'api'"
+                        size="small"
+                        density="compact"
+                        variant="text"
+                        class="row-action-btn"
+                        :loading="isProfileLatencyTesting(profile.id)"
+                        :disabled="acting || isProfileLatencyTesting(profile.id)"
+                        @click="store.testProfileLatency(profile)"
+                      >
+                        测试
                       </v-btn>
                       <v-btn
                         v-if="profile.type === 'official'"
@@ -275,7 +314,18 @@ import { useAppStore } from './stores/app';
 import type { ProfileMeta, RateLimitWindow } from './types';
 
 const store = useAppStore();
-const { acting, current, importingOfficialFile, loading, officialProfileIds, profiles, refreshingProfileIds } = storeToRefs(store);
+const {
+  acting,
+  current,
+  importingOfficialFile,
+  latencyProfileIds,
+  loading,
+  officialProfileIds,
+  profiles,
+  refreshingProfileIds,
+  testingAllLatency,
+  testingLatencyProfileIds,
+} = storeToRefs(store);
 
 const currentStatus = computed(() => {
   if (current.value.error) {
@@ -324,6 +374,74 @@ function renderUsage(window: RateLimitWindow | undefined, type: ProfileMeta['typ
   return `${window.usedPercent}%`;
 }
 
+function latencyColor(profile: ProfileMeta) {
+  if (profile.type !== 'official' && profile.type !== 'api') {
+    return 'default';
+  }
+  if (profile.latencyTest.status === 'error') {
+    return 'warning';
+  }
+  if (profile.latencyTest.status === 'idle') {
+    return 'default';
+  }
+  return profile.latencyTest.available ? 'success' : 'error';
+}
+
+function latencyPrimaryText(profile: ProfileMeta) {
+  if (profile.type !== 'official' && profile.type !== 'api') {
+    return '-';
+  }
+  if (profile.latencyTest.status === 'error') {
+    return '测试失败';
+  }
+  if (profile.latencyTest.status === 'idle') {
+    return '未测试';
+  }
+  if (typeof profile.latencyTest.latencyMs === 'number' && profile.latencyTest.latencyMs > 0) {
+    return `${profile.latencyTest.latencyMs} ms`;
+  }
+  return '已返回';
+}
+
+function latencySecondaryText(profile: ProfileMeta) {
+  if (profile.type !== 'official' && profile.type !== 'api') {
+    return '-';
+  }
+  if (profile.latencyTest.status === 'error') {
+    return '连接异常';
+  }
+  if (profile.latencyTest.status === 'idle') {
+    return '点击测试';
+  }
+  if (profile.latencyTest.available) {
+    return '可用';
+  }
+  if (profile.latencyTest.statusCode) {
+    return `不可用 · ${profile.latencyTest.statusCode}`;
+  }
+  return '不可用';
+}
+
+function latencyTooltip(profile: ProfileMeta) {
+  if (profile.type !== 'official' && profile.type !== 'api') {
+    return '';
+  }
+
+  const checkedAt = profile.latencyTest.checkedAt ? `最后测试：${formatDateTime(profile.latencyTest.checkedAt)}` : '';
+  if (profile.latencyTest.status === 'idle') {
+    return profile.type === 'official'
+      ? '通过额度接口测试当前官方账号的响应延迟和可用性'
+      : '通过 GET /models 测试当前 API Key 的响应延迟和可用性';
+  }
+  if (profile.latencyTest.status === 'error') {
+    return [checkedAt, profile.latencyTest.errorMessage || '延迟测试失败'].filter(Boolean).join(' | ');
+  }
+
+  const statusCode = profile.latencyTest.statusCode ? `HTTP ${profile.latencyTest.statusCode}` : '';
+  const message = profile.latencyTest.errorMessage || (profile.latencyTest.available ? '账号可用' : '账号不可用');
+  return [checkedAt, statusCode, message].filter(Boolean).join(' | ');
+}
+
 function formatDateParts(value?: string) {
   if (!value) {
     return {
@@ -354,6 +472,28 @@ function formatDateParts(value?: string) {
   };
 }
 
+function formatDateTime(value?: string) {
+  if (!value) {
+    return '-';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return `${date.toLocaleDateString('zh-CN', {
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+  })} ${date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })}`;
+}
+
 function planOrURL(profile: ProfileMeta) {
   return profile.type === 'official' ? profile.planType || '-' : profile.baseURL || '-';
 }
@@ -368,6 +508,10 @@ function displayNameText(profile: ProfileMeta) {
 
 function isProfileRefreshing(profileId: string) {
   return refreshingProfileIds.value.includes(profileId);
+}
+
+function isProfileLatencyTesting(profileId: string) {
+  return testingLatencyProfileIds.value.includes(profileId);
 }
 
 async function copyText(value?: string, message = '已复制到剪贴板') {

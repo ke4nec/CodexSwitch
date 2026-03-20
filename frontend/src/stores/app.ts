@@ -33,7 +33,9 @@ export const useAppStore = defineStore('app', {
     loading: false,
     acting: false,
     importingOfficialFile: false,
+    testingAllLatency: false,
     refreshingProfileIds: [] as string[],
+    testingLatencyProfileIds: [] as string[],
     snackbar: {
       show: false,
       text: '',
@@ -66,6 +68,12 @@ export const useAppStore = defineStore('app', {
     settings: (state) => state.appState.settings,
     officialProfileIds: (state) =>
       state.appState.profiles.filter((profile) => profile.type === 'official').map((profile) => profile.id),
+    apiProfileIds: (state) =>
+      state.appState.profiles.filter((profile) => profile.type === 'api').map((profile) => profile.id),
+    latencyProfileIds: (state) =>
+      state.appState.profiles
+        .filter((profile) => profile.type === 'official' || profile.type === 'api')
+        .map((profile) => profile.id),
   },
 
   actions: {
@@ -234,8 +242,52 @@ export const useAppStore = defineStore('app', {
       }
     },
 
-    async runAction(action: () => Promise<void>, notifyOnError = true) {
-      this.acting = true;
+    async testProfileLatency(profile: ProfileMeta, showSuccess = true) {
+      if (profile.type !== 'api' && profile.type !== 'official') {
+        return;
+      }
+      if (this.testingLatencyProfileIds.includes(profile.id)) {
+        return;
+      }
+
+      this.testingLatencyProfileIds = [...this.testingLatencyProfileIds, profile.id];
+      try {
+        this.appState = await backend.refreshApiLatencyTests([profile.id]);
+        if (showSuccess) {
+          this.notify(`${profile.displayName || '账号'} 延迟已测试`);
+        }
+      } catch (error) {
+        this.notify(this.formatError(error), 'error');
+      } finally {
+        this.testingLatencyProfileIds = this.testingLatencyProfileIds.filter((id) => id !== profile.id);
+      }
+    },
+
+    async testAllProfileLatency(showSuccess = true) {
+      if (this.latencyProfileIds.length === 0) {
+        return;
+      }
+
+      const targetIds = [...this.latencyProfileIds];
+      this.testingAllLatency = true;
+      this.testingLatencyProfileIds = targetIds;
+      try {
+        await this.runAction(async () => {
+          this.appState = await backend.refreshApiLatencyTests(targetIds);
+          if (showSuccess) {
+            this.notify('全部账号延迟已测试');
+          }
+        }, showSuccess, false);
+      } finally {
+        this.testingLatencyProfileIds = [];
+        this.testingAllLatency = false;
+      }
+    },
+
+    async runAction(action: () => Promise<void>, notifyOnError = true, trackActing = true) {
+      if (trackActing) {
+        this.acting = true;
+      }
       try {
         await action();
       } catch (error) {
@@ -243,7 +295,9 @@ export const useAppStore = defineStore('app', {
           this.notify(this.formatError(error), 'error');
         }
       } finally {
-        this.acting = false;
+        if (trackActing) {
+          this.acting = false;
+        }
       }
     },
 

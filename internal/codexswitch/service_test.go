@@ -286,6 +286,189 @@ base_url = "%s/backend-api"
 	}
 }
 
+func TestRefreshAPILatencyTests(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v1/models" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if request.Header.Get("Authorization") != "Bearer sk-83ef0e7cd03053710160d7841374de2710020ba5fcc40c1ccd3699c160af9bfe" {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"data":[{"id":"gpt-5.4"}]}`))
+	}))
+	defer server.Close()
+
+	service := newTestServiceWithHTTP(t, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshAPILatencyTests returned error: %v", err)
+	}
+
+	var refreshed ProfileMeta
+	for _, profile := range state.Profiles {
+		if profile.ID == snapshot.Meta.ID {
+			refreshed = profile
+			break
+		}
+	}
+	if refreshed.ID == "" {
+		t.Fatal("expected refreshed api profile in state")
+	}
+	if refreshed.LatencyTest.Status != LatencyTestStatusSuccess {
+		t.Fatalf("expected success latency status, got %s", refreshed.LatencyTest.Status)
+	}
+	if !refreshed.LatencyTest.Available {
+		t.Fatal("expected api profile to be marked available")
+	}
+	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
+		t.Fatalf("expected latency ms to be recorded, got %+v", refreshed.LatencyTest)
+	}
+}
+
+func TestRefreshAPILatencyTestsUnauthorized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v1/models" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusUnauthorized)
+		_, _ = writer.Write([]byte(`{"error":{"message":"Incorrect API key provided"}}`))
+	}))
+	defer server.Close()
+
+	service := newTestServiceWithHTTP(t, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshAPILatencyTests returned error: %v", err)
+	}
+
+	var refreshed ProfileMeta
+	for _, profile := range state.Profiles {
+		if profile.ID == snapshot.Meta.ID {
+			refreshed = profile
+			break
+		}
+	}
+	if refreshed.ID == "" {
+		t.Fatal("expected refreshed api profile in state")
+	}
+	if refreshed.LatencyTest.Status != LatencyTestStatusSuccess {
+		t.Fatalf("expected finished latency status, got %s", refreshed.LatencyTest.Status)
+	}
+	if refreshed.LatencyTest.Available {
+		t.Fatal("expected api profile to be marked unavailable")
+	}
+	if refreshed.LatencyTest.StatusCode == nil || *refreshed.LatencyTest.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status code 401, got %+v", refreshed.LatencyTest.StatusCode)
+	}
+	if !strings.Contains(refreshed.LatencyTest.ErrorMessage, "Incorrect API key provided") {
+		t.Fatalf("expected unauthorized message, got %s", refreshed.LatencyTest.ErrorMessage)
+	}
+}
+
+func TestRefreshOfficialLatencyTests(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/backend-api/wham/usage" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if !strings.HasPrefix(request.Header.Get("Authorization"), "Bearer ") {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"plan_type":"pro"}`))
+	}))
+	defer server.Close()
+
+	service := newTestServiceWithHTTP(t, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "codex", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/backend-api"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceImportedCurrent, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshAPILatencyTests returned error: %v", err)
+	}
+
+	var refreshed ProfileMeta
+	for _, profile := range state.Profiles {
+		if profile.ID == snapshot.Meta.ID {
+			refreshed = profile
+			break
+		}
+	}
+	if refreshed.ID == "" {
+		t.Fatal("expected refreshed official profile in state")
+	}
+	if refreshed.LatencyTest.Status != LatencyTestStatusSuccess {
+		t.Fatalf("expected success latency status, got %s", refreshed.LatencyTest.Status)
+	}
+	if !refreshed.LatencyTest.Available {
+		t.Fatal("expected official profile to be marked available")
+	}
+	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
+		t.Fatalf("expected latency ms to be recorded, got %+v", refreshed.LatencyTest)
+	}
+}
+
 func TestImportOfficialProfileFileRefreshesRateLimits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/backend-api/wham/usage" {

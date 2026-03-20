@@ -18,6 +18,14 @@ const (
 	RateLimitStatusError   RateLimitFetchStatus = "error"
 )
 
+type LatencyTestStatus string
+
+const (
+	LatencyTestStatusIdle    LatencyTestStatus = "idle"
+	LatencyTestStatusSuccess LatencyTestStatus = "success"
+	LatencyTestStatusError   LatencyTestStatus = "error"
+)
+
 type AppSettings struct {
 	CodexHomePath string `json:"codexHomePath"`
 	LastOpenedAt  string `json:"lastOpenedAt"`
@@ -36,29 +44,39 @@ type RateLimitState struct {
 	ErrorMessage string               `json:"errorMessage,omitempty"`
 }
 
+type LatencyTestState struct {
+	Status       LatencyTestStatus `json:"status"`
+	Available    bool              `json:"available"`
+	LatencyMs    *int64            `json:"latencyMs,omitempty"`
+	StatusCode   *int              `json:"statusCode,omitempty"`
+	ErrorMessage string            `json:"errorMessage,omitempty"`
+	CheckedAt    string            `json:"checkedAt,omitempty"`
+}
+
 type ProfileMeta struct {
-	ID                   string         `json:"id"`
-	Type                 ProfileType    `json:"type"`
-	DisplayName          string         `json:"displayName"`
-	StableKeyHash        string         `json:"stableKeyHash"`
-	Email                string         `json:"email,omitempty"`
-	EmailVerified        bool           `json:"emailVerified"`
-	PlanType             string         `json:"planType,omitempty"`
-	ChatGPTUserID        string         `json:"chatgptUserId,omitempty"`
-	ChatGPTAccountID     string         `json:"chatgptAccountId,omitempty"`
-	ClientID             string         `json:"clientId,omitempty"`
-	BaseURL              string         `json:"baseURL,omitempty"`
-	MaskedAPIKey         string         `json:"maskedApiKey,omitempty"`
-	Model                string         `json:"model,omitempty"`
-	ModelReasoningEffort string         `json:"modelReasoningEffort,omitempty"`
-	Source               string         `json:"source"`
-	IsActive             bool           `json:"isActive"`
-	IsValid              bool           `json:"isValid"`
-	ContentHash          string         `json:"contentHash"`
-	CreatedAt            string         `json:"createdAt"`
-	UpdatedAt            string         `json:"updatedAt"`
-	LastRateLimitFetchAt string         `json:"lastRateLimitFetchAt,omitempty"`
-	RateLimits           RateLimitState `json:"rateLimits"`
+	ID                   string           `json:"id"`
+	Type                 ProfileType      `json:"type"`
+	DisplayName          string           `json:"displayName"`
+	StableKeyHash        string           `json:"stableKeyHash"`
+	Email                string           `json:"email,omitempty"`
+	EmailVerified        bool             `json:"emailVerified"`
+	PlanType             string           `json:"planType,omitempty"`
+	ChatGPTUserID        string           `json:"chatgptUserId,omitempty"`
+	ChatGPTAccountID     string           `json:"chatgptAccountId,omitempty"`
+	ClientID             string           `json:"clientId,omitempty"`
+	BaseURL              string           `json:"baseURL,omitempty"`
+	MaskedAPIKey         string           `json:"maskedApiKey,omitempty"`
+	Model                string           `json:"model,omitempty"`
+	ModelReasoningEffort string           `json:"modelReasoningEffort,omitempty"`
+	Source               string           `json:"source"`
+	IsActive             bool             `json:"isActive"`
+	IsValid              bool             `json:"isValid"`
+	ContentHash          string           `json:"contentHash"`
+	CreatedAt            string           `json:"createdAt"`
+	UpdatedAt            string           `json:"updatedAt"`
+	LastRateLimitFetchAt string           `json:"lastRateLimitFetchAt,omitempty"`
+	RateLimits           RateLimitState   `json:"rateLimits"`
+	LatencyTest          LatencyTestState `json:"latencyTest"`
 }
 
 type CurrentProfileState struct {
