@@ -378,6 +378,9 @@ function latencyColor(profile: ProfileMeta) {
   if (profile.type !== 'official' && profile.type !== 'api') {
     return 'default';
   }
+  if (isProfileLatencyTesting(profile.id)) {
+    return 'primary';
+  }
   if (profile.latencyTest.status === 'error') {
     return 'warning';
   }
@@ -390,6 +393,9 @@ function latencyColor(profile: ProfileMeta) {
 function latencyPrimaryText(profile: ProfileMeta) {
   if (profile.type !== 'official' && profile.type !== 'api') {
     return '-';
+  }
+  if (isProfileLatencyTesting(profile.id)) {
+    return '测试中';
   }
   if (profile.latencyTest.status === 'error') {
     return '测试失败';
@@ -406,6 +412,9 @@ function latencyPrimaryText(profile: ProfileMeta) {
 function latencySecondaryText(profile: ProfileMeta) {
   if (profile.type !== 'official' && profile.type !== 'api') {
     return '-';
+  }
+  if (isProfileLatencyTesting(profile.id)) {
+    return '请稍候';
   }
   if (profile.latencyTest.status === 'error') {
     return '连接异常';
@@ -425,6 +434,9 @@ function latencySecondaryText(profile: ProfileMeta) {
 function latencyTooltip(profile: ProfileMeta) {
   if (profile.type !== 'official' && profile.type !== 'api') {
     return '';
+  }
+  if (isProfileLatencyTesting(profile.id)) {
+    return '正在进行延迟测试，完成后会自动刷新当前账号结果';
   }
 
   const checkedAt = profile.latencyTest.checkedAt ? `最后测试：${formatDateTime(profile.latencyTest.checkedAt)}` : '';

@@ -264,22 +264,23 @@ export const useAppStore = defineStore('app', {
     },
 
     async testAllProfileLatency(showSuccess = true) {
-      if (this.latencyProfileIds.length === 0) {
+      const targets = this.appState.profiles.filter(
+        (profile) =>
+          (profile.type === 'official' || profile.type === 'api') &&
+          !this.testingLatencyProfileIds.includes(profile.id),
+      );
+
+      if (targets.length === 0) {
         return;
       }
 
-      const targetIds = [...this.latencyProfileIds];
       this.testingAllLatency = true;
-      this.testingLatencyProfileIds = targetIds;
       try {
-        await this.runAction(async () => {
-          this.appState = await backend.refreshApiLatencyTests(targetIds);
-          if (showSuccess) {
-            this.notify('全部账号延迟已测试');
-          }
-        }, showSuccess, false);
+        await Promise.allSettled(targets.map((profile) => this.testProfileLatency(profile, false)));
+        if (showSuccess) {
+          this.notify('全部账号延迟已测试');
+        }
       } finally {
-        this.testingLatencyProfileIds = [];
         this.testingAllLatency = false;
       }
     },
