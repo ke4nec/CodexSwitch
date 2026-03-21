@@ -45,7 +45,8 @@ func main() {
 			// Keep one stable WebView2 profile path for both dev and release builds.
 			WebviewUserDataPath: resolveWebviewUserDataPath(),
 		},
-		OnStartup: app.startup,
+		OnStartup:  app.startup,
+		OnShutdown: app.shutdown,
 		Bind: []any{
 			app,
 		},

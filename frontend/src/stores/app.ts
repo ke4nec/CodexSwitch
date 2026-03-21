@@ -27,6 +27,10 @@ const defaultApiForm = (): APIProfileInput => ({
   apiKey: '',
 });
 
+const activeOfficialProfileRefreshIntervalMs = 5 * 60 * 1000;
+
+let activeOfficialProfileRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
 function profileLatencySortBucket(profile: ProfileMeta) {
   const latencyMs = profile.latencyTest.latencyMs;
   if (profile.latencyTest.status !== 'success' || typeof latencyMs !== 'number' || latencyMs <= 0) {
@@ -117,7 +121,14 @@ export const useAppStore = defineStore('app', {
     },
 
     async bootstrap() {
+      if (!activeOfficialProfileRefreshTimer) {
+        activeOfficialProfileRefreshTimer = setInterval(() => {
+          void this.refreshActiveOfficialProfile(false);
+        }, activeOfficialProfileRefreshIntervalMs);
+      }
+
       await this.loadAppState(false);
+      void this.refreshActiveOfficialProfile(false);
     },
 
     async loadAppState(showSuccess = false) {
@@ -271,6 +282,17 @@ export const useAppStore = defineStore('app', {
       } finally {
         this.refreshingProfileIds = this.refreshingProfileIds.filter((id) => id !== profile.id);
       }
+    },
+
+    async refreshActiveOfficialProfile(showSuccess = false) {
+      const activeOfficialProfile = this.appState.profiles.find(
+        (profile) => profile.isActive && profile.type === 'official',
+      );
+      if (!activeOfficialProfile) {
+        return;
+      }
+
+      await this.refreshProfileRateLimit(activeOfficialProfile, showSuccess);
     },
 
     async testProfileLatency(profile: ProfileMeta, showSuccess = true) {

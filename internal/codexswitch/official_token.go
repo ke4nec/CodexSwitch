@@ -92,6 +92,13 @@ func (s *Service) refreshOfficialProfileAuth(profile storedProfile) (storedProfi
 		auth.Tokens.RefreshToken = token
 		changed = true
 	}
+	if strings.TrimSpace(auth.Tokens.AccountID) == "" {
+		accountID := extractOfficialAccountID(auth.Tokens.IDToken, auth.Tokens.AccessToken)
+		if accountID != "" {
+			auth.Tokens.AccountID = accountID
+			changed = true
+		}
+	}
 
 	lastRefresh := s.now().UTC().Format(time.RFC3339)
 	if auth.LastRefresh == nil || strings.TrimSpace(*auth.LastRefresh) != lastRefresh {
@@ -202,4 +209,22 @@ func formatOfficialTokenRefreshFailure(resp *http.Response) string {
 		statusText = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
 	return statusText
+}
+
+func extractOfficialAccountID(idToken, accessToken string) string {
+	var idClaims idTokenClaims
+	if strings.TrimSpace(idToken) != "" && decodeJWTClaims(idToken, &idClaims) == nil {
+		if accountID := strings.TrimSpace(idClaims.Auth.ChatGPTAccountID); accountID != "" {
+			return accountID
+		}
+	}
+
+	var accessClaims accessTokenClaims
+	if strings.TrimSpace(accessToken) != "" && decodeJWTClaims(accessToken, &accessClaims) == nil {
+		if accountID := strings.TrimSpace(accessClaims.Auth.ChatGPTAccountID); accountID != "" {
+			return accountID
+		}
+	}
+
+	return ""
 }
