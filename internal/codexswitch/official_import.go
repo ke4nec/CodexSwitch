@@ -37,7 +37,12 @@ func (s *Service) buildOfficialProfileSnapshotFromFile(filePath string) (*profil
 		return nil, fmt.Errorf("所选文件不是受支持的官方账号 auth.json 或 CLI auth.json: %s", filepath.Base(filePath))
 	}
 
-	snapshot, err := buildProfileSnapshot(normalizedAuthRaw, officialConfigTemplate, source, s.now())
+	configRaw, err := s.sharedOfficialConfigRaw("")
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := buildProfileSnapshot(normalizedAuthRaw, configRaw, source, s.now())
 	if err != nil {
 		return nil, err
 	}

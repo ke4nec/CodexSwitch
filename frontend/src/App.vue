@@ -379,7 +379,7 @@ function renderUsage(window: RateLimitWindow | undefined, type: ProfileMeta['typ
   if (!window) {
     return '未获取';
   }
-  return `${window.usedPercent}%`;
+  return `${Math.max(0, 100 - window.usedPercent)}%`;
 }
 
 function latencyColor(profile: ProfileMeta) {

@@ -428,8 +428,11 @@ func (s *Service) scanCurrentProfile(codexHomePath string) (CurrentProfileState,
 	}
 	configRaw, err := readTextFile(configPath)
 	if err != nil {
-		state.Error = "当前目录缺少 config.toml"
-		return state, nil
+		configRaw, err = s.fallbackCurrentOfficialConfigRaw(authRaw)
+		if err != nil {
+			state.Error = err.Error()
+			return state, nil
+		}
 	}
 
 	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceImportedCurrent, s.now())
@@ -455,14 +458,36 @@ func (s *Service) writeTargetProfile(codexHomePath string, snapshot *profileSnap
 	if snapshot == nil {
 		return fmt.Errorf("目标配置不能为空")
 	}
+	configRaw := snapshot.ConfigRaw
+	if snapshot.Meta.Type == ProfileTypeOfficial {
+		var err error
+		configRaw, err = s.sharedOfficialConfigRaw(snapshot.ConfigRaw)
+		if err != nil {
+			return fmt.Errorf("读取官方共享 config.toml 失败: %w", err)
+		}
+	}
 	if err := ensureDir(codexHomePath); err != nil {
 		return fmt.Errorf("创建目标 Codex 目录失败: %w", err)
 	}
 	if err := safeWriteText(filepath.Join(codexHomePath, "auth.json"), snapshot.AuthRaw); err != nil {
 		return fmt.Errorf("写入目标 auth.json 失败: %w", err)
 	}
-	if err := safeWriteText(filepath.Join(codexHomePath, "config.toml"), snapshot.ConfigRaw); err != nil {
+	if err := safeWriteText(filepath.Join(codexHomePath, "config.toml"), configRaw); err != nil {
 		return fmt.Errorf("写入目标 config.toml 失败: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) fallbackCurrentOfficialConfigRaw(authRaw string) (string, error) {
+	normalizedAuthRaw, _, err := normalizeAuthJSON(authRaw)
+	if err != nil {
+		return "", fmt.Errorf("当前目录缺少 config.toml")
+	}
+
+	var auth authFile
+	if err := json.Unmarshal([]byte(normalizedAuthRaw), &auth); err != nil || detectProfileType(auth) != ProfileTypeOfficial {
+		return "", fmt.Errorf("当前目录缺少 config.toml")
+	}
+
+	return s.sharedOfficialConfigRaw("")
 }

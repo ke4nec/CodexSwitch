@@ -22,6 +22,10 @@ func (s *Service) profileDir(id string) string {
 	return filepath.Join(s.profilesRoot(), id)
 }
 
+func (s *Service) sharedOfficialConfigPath() string {
+	return filepath.Join(s.appConfigDir, "official-config.toml")
+}
+
 func (s *Service) ensureAppLayout() error {
 	if err := ensureDir(s.appConfigDir); err != nil {
 		return fmt.Errorf("初始化应用配置目录失败: %w", err)
@@ -48,7 +52,7 @@ func (s *Service) loadProfile(id string) (storedProfile, error) {
 	if err != nil {
 		return storedProfile{}, err
 	}
-	configRaw, err := readTextFile(filepath.Join(dir, "config.toml"))
+	configRaw, err := s.loadStoredConfigRaw(meta, dir)
 	if err != nil {
 		return storedProfile{}, err
 	}
@@ -98,6 +102,12 @@ func (s *Service) saveProfileSnapshot(snapshot *profileSnapshot) error {
 		return err
 	}
 
+	normalizedSnapshot, err := s.applyOfficialSharedConfig(snapshot)
+	if err != nil {
+		return err
+	}
+	snapshot = normalizedSnapshot
+
 	var existing *ProfileMeta
 	if stored, err := s.loadProfile(snapshot.Meta.ID); err == nil {
 		existing = &stored.Meta
@@ -111,7 +121,11 @@ func (s *Service) saveProfileSnapshot(snapshot *profileSnapshot) error {
 	if err := safeWriteText(filepath.Join(dir, "auth.json"), snapshot.AuthRaw); err != nil {
 		return fmt.Errorf("写入 auth.json 失败: %w", err)
 	}
-	if err := safeWriteText(filepath.Join(dir, "config.toml"), snapshot.ConfigRaw); err != nil {
+	if snapshot.Meta.Type == ProfileTypeOfficial {
+		if err := os.Remove(filepath.Join(dir, "config.toml")); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("删除官方 profile 冗余 config.toml 失败: %w", err)
+		}
+	} else if err := safeWriteText(filepath.Join(dir, "config.toml"), snapshot.ConfigRaw); err != nil {
 		return fmt.Errorf("写入 config.toml 失败: %w", err)
 	}
 	if err := safeWriteJSON(filepath.Join(dir, "meta.json"), snapshot.Meta); err != nil {
@@ -124,8 +138,7 @@ func (s *Service) deleteProfileDirectory(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return fmt.Errorf("配置 ID 不能为空")
 	}
-	err := os.RemoveAll(s.profileDir(id))
-	if err != nil {
+	if err := os.RemoveAll(s.profileDir(id)); err != nil {
 		return fmt.Errorf("删除配置失败: %w", err)
 	}
 	return nil
@@ -193,4 +206,69 @@ func normalizeStoredProfileMeta(profile *storedProfile) {
 
 	profile.Meta.MaskedAPIKey = maskAPIKey(apiKey)
 	profile.Meta.DisplayName = trimmedFirst(profile.Meta.MaskedAPIKey, profile.Meta.BaseURL, "API 配置")
+}
+
+func (s *Service) loadStoredConfigRaw(meta ProfileMeta, dir string) (string, error) {
+	if meta.Type != ProfileTypeOfficial {
+		return readTextFile(filepath.Join(dir, "config.toml"))
+	}
+
+	legacyConfigRaw := ""
+	if raw, err := readTextFile(filepath.Join(dir, "config.toml")); err == nil {
+		legacyConfigRaw = raw
+	}
+	return s.sharedOfficialConfigRaw(legacyConfigRaw)
+}
+
+func (s *Service) sharedOfficialConfigRaw(seed string) (string, error) {
+	if err := s.ensureAppLayout(); err != nil {
+		return "", err
+	}
+
+	path := s.sharedOfficialConfigPath()
+	if raw, err := readTextFile(path); err == nil && strings.TrimSpace(raw) != "" {
+		return normalizeConfigRaw(raw), nil
+	} else if err != nil && !isNotFound(err) {
+		return "", err
+	}
+
+	configRaw := normalizeConfigRaw(seed)
+	if err := safeWriteText(path, configRaw); err != nil {
+		return "", fmt.Errorf("写入官方共享 config.toml 失败: %w", err)
+	}
+	return configRaw, nil
+}
+
+func (s *Service) applyOfficialSharedConfig(snapshot *profileSnapshot) (*profileSnapshot, error) {
+	if snapshot == nil || snapshot.Meta.Type != ProfileTypeOfficial {
+		return snapshot, nil
+	}
+
+	configRaw, err := s.sharedOfficialConfigRaw(snapshot.ConfigRaw)
+	if err != nil {
+		return nil, err
+	}
+	if normalizeConfigRaw(snapshot.ConfigRaw) == configRaw {
+		snapshot.ConfigRaw = configRaw
+		return snapshot, nil
+	}
+
+	rebuilt, err := buildProfileSnapshot(snapshot.AuthRaw, configRaw, snapshot.Meta.Source, s.now())
+	if err != nil {
+		return nil, fmt.Errorf("应用官方共享 config.toml 失败: %w", err)
+	}
+	rebuilt.Meta.IsActive = snapshot.Meta.IsActive
+	rebuilt.Meta.LastRateLimitFetchAt = snapshot.Meta.LastRateLimitFetchAt
+	rebuilt.Meta.RateLimits = snapshot.Meta.RateLimits
+	rebuilt.Meta.LatencyTest = snapshot.Meta.LatencyTest
+	return rebuilt, nil
+}
+
+func normalizeConfigRaw(raw string) string {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		raw = strings.TrimSpace(officialConfigTemplate)
+	}
+	return raw + "\n"
 }

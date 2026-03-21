@@ -520,12 +520,8 @@ model_reasoning_effort = "xhigh"
 [model_providers.OpenAI]
 base_url = "%s/backend-api"
 `, server.URL)
-	updatedSnapshot, err := buildProfileSnapshot(stored.AuthRaw, stored.ConfigRaw, stored.Meta.Source, service.now())
-	if err != nil {
-		t.Fatalf("buildProfileSnapshot failed: %v", err)
-	}
-	if err := service.saveProfileSnapshot(updatedSnapshot); err != nil {
-		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	if err := safeWriteText(service.sharedOfficialConfigPath(), stored.ConfigRaw); err != nil {
+		t.Fatalf("safeWriteText shared official config failed: %v", err)
 	}
 
 	state, err = service.RefreshRateLimits([]string{state.Profiles[0].ID})
