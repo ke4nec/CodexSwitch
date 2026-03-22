@@ -57,12 +57,6 @@ if not exist "frontend\node_modules" (
   echo [STEP] frontend dependencies already present
 )
 
-echo [STEP] go test ./...
-call go test ./... || exit /b 1
-
-echo [STEP] go build ./...
-call go build ./... || exit /b 1
-
 echo [STEP] npm run build
 pushd "frontend"
 call npm run build || (
@@ -70,6 +64,12 @@ call npm run build || (
   exit /b 1
 )
 popd
+
+echo [STEP] go test ./...
+call go test ./... || exit /b 1
+
+echo [STEP] go build ./...
+call go build ./... || exit /b 1
 
 if "%SKIP_WAILS%"=="1" (
   echo [STEP] skip wails release build

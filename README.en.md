@@ -181,12 +181,12 @@ clean.bat -All
 If you prefer running commands directly:
 
 ```bash
-go test ./...
-go build ./...
 cd frontend
 npm install
 npm run build
 cd ..
+go test ./...
+go build ./...
 wails build
 ```
 

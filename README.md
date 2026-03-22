@@ -181,12 +181,12 @@ clean.bat -All
 如果你更习惯直接执行命令：
 
 ```bash
-go test ./...
-go build ./...
 cd frontend
 npm install
 npm run build
 cd ..
+go test ./...
+go build ./...
 wails build
 ```
 
