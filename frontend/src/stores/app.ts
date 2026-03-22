@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 
+import { runtimeMessageMarkers, translate } from '../i18n';
 import { backend } from '../lib/backend';
 import type { APIProfileInput, AppState, ProfileMeta } from '../types';
 
@@ -136,7 +137,7 @@ export const useAppStore = defineStore('app', {
       try {
         this.appState = await backend.getAppState();
         if (showSuccess) {
-          this.notify('列表已刷新');
+          this.notify(translate('notifications.listRefreshed'));
         }
       } catch (error) {
         this.notify(this.formatError(error), 'error');
@@ -170,10 +171,10 @@ export const useAppStore = defineStore('app', {
       this.importingOfficialFile = true;
       try {
         this.appState = await backend.importOfficialProfileFile();
-        this.notify('官方账号文件已导入');
+        this.notify(translate('notifications.officialProfileImported'));
       } catch (error) {
         const message = this.formatError(error);
-        if (!message.includes('已取消文件选择')) {
+        if (!this.isFilePickerCancelled(message)) {
           this.notify(message, 'error');
         }
       } finally {
@@ -185,10 +186,10 @@ export const useAppStore = defineStore('app', {
       await this.runAction(async () => {
         if (this.apiDialog.mode === 'create') {
           this.appState = await backend.createApiProfile(form);
-          this.notify('API 配置已创建');
+          this.notify(translate('notifications.apiProfileCreated'));
         } else {
           this.appState = await backend.updateApiProfile(this.apiDialog.profileId, form);
-          this.notify('API 配置已更新');
+          this.notify(translate('notifications.apiProfileUpdated'));
         }
         this.apiDialog.open = false;
       });
@@ -205,7 +206,7 @@ export const useAppStore = defineStore('app', {
       await this.runAction(async () => {
         this.appState = await backend.updateSettings({ codexHomePath });
         this.settingsDialog.open = false;
-        this.notify('设置已保存并完成重扫');
+        this.notify(translate('notifications.settingsSaved'));
       });
     },
 
@@ -214,9 +215,9 @@ export const useAppStore = defineStore('app', {
         open: true,
         action: 'switch',
         profileId,
-        title: '切换配置',
-        text: '切换前会先保护当前配置，并把目标配置写入目标 Codex 目录。',
-        confirmText: '确认切换',
+        title: translate('confirm.switchTitle'),
+        text: translate('confirm.switchText'),
+        confirmText: translate('confirm.switchConfirm'),
         color: 'primary',
       };
     },
@@ -226,9 +227,9 @@ export const useAppStore = defineStore('app', {
         open: true,
         action: 'delete',
         profileId,
-        title: '删除配置',
-        text: '删除只会影响 CodexSwitch 的托管仓库，不会主动清空目标 Codex 目录。',
-        confirmText: '确认删除',
+        title: translate('confirm.deleteTitle'),
+        text: translate('confirm.deleteText'),
+        confirmText: translate('confirm.deleteConfirm'),
         color: 'error',
       };
     },
@@ -241,10 +242,10 @@ export const useAppStore = defineStore('app', {
       await this.runAction(async () => {
         if (this.confirmDialog.action === 'switch') {
           this.appState = await backend.switchProfile(this.confirmDialog.profileId);
-          this.notify('配置切换成功');
+          this.notify(translate('notifications.switched'));
         } else {
           this.appState = await backend.deleteProfile(this.confirmDialog.profileId);
-          this.notify('配置已删除');
+          this.notify(translate('notifications.deleted'));
         }
         this.confirmDialog.open = false;
       });
@@ -258,7 +259,7 @@ export const useAppStore = defineStore('app', {
       await this.runAction(async () => {
         this.appState = await backend.refreshRateLimits(this.officialProfileIds);
         if (showSuccess) {
-          this.notify('全部官方账号额度已刷新');
+          this.notify(translate('notifications.allRateLimitsRefreshed'));
         }
       }, showSuccess);
     },
@@ -275,7 +276,11 @@ export const useAppStore = defineStore('app', {
       try {
         this.appState = await backend.refreshRateLimits([profile.id]);
         if (showSuccess) {
-          this.notify(`${profile.displayName || '官方账号'} 额度已刷新`);
+          this.notify(
+            translate('notifications.rateLimitRefreshed', {
+              name: profile.displayName || translate('common.officialAccount'),
+            }),
+          );
         }
       } catch (error) {
         this.notify(this.formatError(error), 'error');
@@ -307,7 +312,11 @@ export const useAppStore = defineStore('app', {
       try {
         this.appState = await backend.refreshApiLatencyTests([profile.id]);
         if (showSuccess) {
-          this.notify(`${profile.displayName || '账号'} 延迟已测试`);
+          this.notify(
+            translate('notifications.latencyTested', {
+              name: profile.displayName || translate('common.account'),
+            }),
+          );
         }
       } catch (error) {
         this.notify(this.formatError(error), 'error');
@@ -331,7 +340,7 @@ export const useAppStore = defineStore('app', {
       try {
         await Promise.allSettled(targets.map((profile) => this.testProfileLatency(profile, false)));
         if (showSuccess) {
-          this.notify('全部账号延迟已测试');
+          this.notify(translate('notifications.allLatencyTested'));
         }
       } finally {
         this.testingAllLatency = false;
@@ -359,7 +368,13 @@ export const useAppStore = defineStore('app', {
       if (error instanceof Error) {
         return error.message;
       }
-      return String(error ?? '未知错误');
+      return String(error ?? translate('common.unknownError'));
+    },
+
+    isFilePickerCancelled(message: string) {
+      const candidates = [translate('runtime.filePickerCancelled'), ...runtimeMessageMarkers.filePickerCancelled];
+
+      return candidates.some((candidate) => message.includes(candidate));
     },
   },
 });

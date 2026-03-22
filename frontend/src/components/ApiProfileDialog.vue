@@ -2,43 +2,46 @@
   <v-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
     <v-card class="dialog-card">
       <v-card-title class="dialog-title">
-        {{ mode === 'create' ? '新增 API 配置' : '编辑 API 配置' }}
+        {{ dialogTitle }}
       </v-card-title>
       <v-card-text class="dialog-body">
         <v-text-field
           v-model="localForm.baseURL"
-          label="Base URL"
+          :label="t('dialogs.apiProfile.baseUrl')"
           placeholder="https://api.openai.com/v1"
         />
-        <v-text-field v-model="localForm.model" label="模型" placeholder="gpt-5.4" />
+        <v-text-field v-model="localForm.model" :label="t('dialogs.apiProfile.model')" placeholder="gpt-5.4" />
         <v-text-field
           v-model="localForm.modelReasoningEffort"
-          label="推理强度"
+          :label="t('dialogs.apiProfile.reasoningEffort')"
           placeholder="xhigh"
         />
         <v-textarea
           v-model="localForm.apiKey"
-          label="OPENAI_API_KEY"
+          :label="t('dialogs.apiProfile.apiKey')"
           rows="3"
           auto-grow
           placeholder="sk-..."
         />
         <div class="dialog-hint">
-          保存后会重新生成 `auth.json` 和 `config.toml`。
+          {{ t('dialogs.apiProfile.hint') }}
         </div>
       </v-card-text>
       <v-card-actions class="dialog-actions">
         <v-spacer />
-        <v-btn variant="text" :disabled="loading" @click="emit('update:modelValue', false)">取消</v-btn>
-        <v-btn color="primary" :loading="loading" @click="submit">保存</v-btn>
+        <v-btn variant="text" :disabled="loading" @click="emit('update:modelValue', false)">
+          {{ t('dialogs.confirm.cancel') }}
+        </v-btn>
+        <v-btn color="primary" :loading="loading" @click="submit">{{ t('common.save') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 
+import { useI18n } from '../i18n';
 import type { APIProfileInput } from '../types';
 
 const props = defineProps<{
@@ -53,12 +56,18 @@ const emit = defineEmits<{
   save: [APIProfileInput];
 }>();
 
+const { t } = useI18n();
+
 const localForm = reactive<APIProfileInput>({
   baseURL: '',
   model: '',
   modelReasoningEffort: '',
   apiKey: '',
 });
+
+const dialogTitle = computed(() =>
+  props.mode === 'create' ? t('dialogs.apiProfile.createTitle') : t('dialogs.apiProfile.editTitle'),
+);
 
 watch(
   () => props.form,

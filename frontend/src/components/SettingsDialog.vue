@@ -1,21 +1,23 @@
 <template>
   <v-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
     <v-card class="dialog-card">
-      <v-card-title class="dialog-title">设置</v-card-title>
+      <v-card-title class="dialog-title">{{ t('dialogs.settings.title') }}</v-card-title>
       <v-card-text class="dialog-body">
         <v-text-field
           v-model="path"
-          label="目标 Codex 配置目录"
+          :label="t('dialogs.settings.codexHomePath')"
           placeholder="C:\\Users\\You\\.codex"
         />
         <div class="dialog-hint">
-          保存后会立即重扫该目录，并重新识别当前激活配置。
+          {{ t('dialogs.settings.hint') }}
         </div>
       </v-card-text>
       <v-card-actions class="dialog-actions">
         <v-spacer />
-        <v-btn variant="text" :disabled="loading" @click="emit('update:modelValue', false)">取消</v-btn>
-        <v-btn color="primary" :loading="loading" @click="emit('save', path)">保存</v-btn>
+        <v-btn variant="text" :disabled="loading" @click="emit('update:modelValue', false)">
+          {{ t('dialogs.confirm.cancel') }}
+        </v-btn>
+        <v-btn color="primary" :loading="loading" @click="emit('save', path)">{{ t('common.save') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -23,6 +25,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+
+import { useI18n } from '../i18n';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -34,6 +38,8 @@ const emit = defineEmits<{
   'update:modelValue': [boolean];
   save: [string];
 }>();
+
+const { t } = useI18n();
 
 const path = ref('');
 

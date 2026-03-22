@@ -1,4 +1,5 @@
 import type { APIProfileInput, AppState, UpdateSettingsInput } from '../types';
+import { translate } from '../i18n';
 
 interface BackendAPI {
   GetAppState(): Promise<AppState>;
@@ -27,7 +28,7 @@ declare global {
 function appBridge(): BackendAPI {
   const bridge = window.go?.main?.App;
   if (!bridge) {
-    throw new Error('Wails runtime 未就绪，请通过 Wails 启动应用');
+    throw new Error(translate('runtime.wailsNotReady'));
   }
   return bridge;
 }

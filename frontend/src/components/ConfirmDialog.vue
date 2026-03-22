@@ -7,7 +7,9 @@
       </v-card-text>
       <v-card-actions class="dialog-actions">
         <v-spacer />
-        <v-btn variant="text" :disabled="loading" @click="emit('update:modelValue', false)">取消</v-btn>
+        <v-btn variant="text" :disabled="loading" @click="emit('update:modelValue', false)">
+          {{ t('dialogs.confirm.cancel') }}
+        </v-btn>
         <v-btn :color="color" :loading="loading" @click="emit('confirm')">{{ confirmText }}</v-btn>
       </v-card-actions>
     </v-card>
@@ -15,6 +17,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '../i18n';
+
 defineProps<{
   modelValue: boolean;
   loading: boolean;
@@ -28,4 +32,6 @@ const emit = defineEmits<{
   'update:modelValue': [boolean];
   confirm: [];
 }>();
+
+const { t } = useI18n();
 </script>
