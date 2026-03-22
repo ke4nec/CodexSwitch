@@ -109,18 +109,36 @@ CodexSwitch 的核心流程：
 
 ### 版本规则
 
-- 默认版本基线为 `1.0.0`
-- 配置位置在 [`wails.json`](wails.json) 的 `info.productVersion`
-- 如果仓库里还没有历史版本，第一次自动发布为 `v1.0.0`
-- 后续每次发布会将最后一位自动加 `1`
-  例如：`v1.0.0` -> `v1.0.1` -> `v1.0.2`
+- 项目版本号配置在 [`wails.json`](wails.json) 的 `info.productVersion`
+- 默认初始版本可以从 `1.0.0` 开始
+- 发布工作流不会再按每次提交自动递增版本
+- 如果当前版本对应的 tag 已存在，工作流会直接失败，避免覆盖旧 Release
+
+### 触发发布的两种方式
+
+- 修改 [`wails.json`](wails.json) 里的 `info.productVersion`，然后推送到 `master`
+- 直接推送版本 tag，例如 `v1.0.1`
+
+### 推荐发布流程
+
+1. 修改 [`wails.json`](wails.json) 中的 `info.productVersion`
+2. 提交并推送到 `master`
+3. GitHub Actions 自动构建并发布对应版本
+
+如果你更习惯手动控版本，也可以直接创建并推送 tag：
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
 
 ### 发布工作流
 
 - 工作流文件： [`.github/workflows/release-cross-platform.yml`](.github/workflows/release-cross-platform.yml)
 - 触发方式：
-  - 手动触发
-  - 推送到 `master`
+  - 推送到 `master` 且 [`wails.json`](wails.json) 发生变更
+  - 推送 `v*` 版本 tag
+  - 手动触发（保留为兜底方式）
 
 ---
 

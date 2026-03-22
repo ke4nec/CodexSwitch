@@ -109,18 +109,36 @@ The core flow is straightforward:
 
 ### Versioning
 
-- Default base version: `1.0.0`
-- Stored in [`wails.json`](wails.json) under `info.productVersion`
-- If no previous release exists, the first automated release is `v1.0.0`
-- Each new release increments the last version segment automatically
-  Example: `v1.0.0` -> `v1.0.1` -> `v1.0.2`
+- The project version is stored in [`wails.json`](wails.json) under `info.productVersion`
+- You can start from the default version `1.0.0`
+- Releases no longer auto-increment on every commit
+- If the tag for the current version already exists, the workflow fails instead of overwriting an existing release
+
+### Two Ways To Trigger A Release
+
+- Update `info.productVersion` in [`wails.json`](wails.json) and push to `master`
+- Push a version tag such as `v1.0.1`
+
+### Recommended Release Flow
+
+1. Update `info.productVersion` in [`wails.json`](wails.json)
+2. Commit and push to `master`
+3. GitHub Actions builds and publishes that version automatically
+
+If you prefer explicit tag-based releases, you can also do:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
 
 ### Release Workflow
 
 - Workflow file: [`.github/workflows/release-cross-platform.yml`](.github/workflows/release-cross-platform.yml)
 - Trigger:
-  - manual dispatch
-  - push to `master`
+  - push to `master` when [`wails.json`](wails.json) changes
+  - push a `v*` version tag
+  - manual dispatch as a fallback
 
 ---
 

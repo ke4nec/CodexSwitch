@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - master
+    tags:
+      - v*
+    paths:
+      - wails.json
 
 permissions:
   contents: write
@@ -37,34 +41,35 @@ jobs:
       - name: Resolve release version
         id: version
         shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          default_version="$(node -p "const fs=require('fs'); const cfg=JSON.parse(fs.readFileSync('wails.json','utf8')); (cfg.info && cfg.info.productVersion) || '1.0.0'")"
-          if [[ ! "$default_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid default version: $default_version" >&2
+          config_version="$(node -p "const fs=require('fs'); const cfg=JSON.parse(fs.readFileSync('wails.json','utf8')); (cfg.info && cfg.info.productVersion) || '1.0.0'")"
+          if [[ ! "$config_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid productVersion in wails.json: $config_version" >&2
             exit 1
           fi
 
-          semver_pattern='v[0-9]*.[0-9]*.[0-9]*'
-          head_tag="$(git tag --points-at "$GITHUB_SHA" --list "$semver_pattern" --sort=-version:refname | head -n1)"
-          if [[ -n "$head_tag" ]]; then
-            version="${head_tag#v}"
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            if [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid release tag: $REF_NAME" >&2
+              exit 1
+            fi
+            tag="$REF_NAME"
+            version="${tag#v}"
           else
-            latest_tag="$(git tag --list "$semver_pattern" --sort=-version:refname | head -n1)"
-            if [[ -z "$latest_tag" ]]; then
-              version="$default_version"
-            else
-              latest="${latest_tag#v}"
-              if [[ ! "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                echo "Invalid latest tag: $latest_tag" >&2
-                exit 1
-              fi
-              IFS='.' read -r major minor patch <<< "$latest"
-              version="${major}.${minor}.$((patch + 1))"
+            version="$config_version"
+            tag="v$version"
+            if git show-ref --verify --quiet "refs/tags/$tag"; then
+              echo "Release tag already exists: $tag" >&2
+              echo "Bump wails.json info.productVersion before publishing again." >&2
+              exit 1
             fi
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.label }}
