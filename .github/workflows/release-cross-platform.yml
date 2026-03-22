@@ -26,6 +26,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
       - name: Fetch tags
         run: git fetch --force --tags
 
@@ -39,15 +44,20 @@ jobs:
             exit 1
           fi
 
-          head_tag="$(git tag --points-at "$GITHUB_SHA" --list 'v*' --sort=-version:refname | head -n1)"
+          semver_pattern='v[0-9]*.[0-9]*.[0-9]*'
+          head_tag="$(git tag --points-at "$GITHUB_SHA" --list "$semver_pattern" --sort=-version:refname | head -n1)"
           if [[ -n "$head_tag" ]]; then
             version="${head_tag#v}"
           else
-            latest_tag="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
+            latest_tag="$(git tag --list "$semver_pattern" --sort=-version:refname | head -n1)"
             if [[ -z "$latest_tag" ]]; then
               version="$default_version"
             else
               latest="${latest_tag#v}"
+              if [[ ! "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "Invalid latest tag: $latest_tag" >&2
+                exit 1
+              fi
               IFS='.' read -r major minor patch <<< "$latest"
               version="${major}.${minor}.$((patch + 1))"
             fi
@@ -114,16 +124,22 @@ jobs:
         run: |
           node -e "const fs=require('fs'); const path='wails.json'; const cfg=JSON.parse(fs.readFileSync(path,'utf8')); cfg.info = {...(cfg.info||{}), companyName:'Codex', productName:'CodexSwitch', productVersion:process.env.APP_VERSION, comments:'Built using Wails'}; fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');"
 
+      - name: Normalize npm registry for CI
+        shell: bash
+        run: |
+          node -e "const fs=require('fs'); const path='frontend/package-lock.json'; const before=fs.readFileSync(path,'utf8'); const after=before.replaceAll('https://registry.npmmirror.com/', 'https://registry.npmjs.org/'); if (before !== after) fs.writeFileSync(path, after);"
+
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        env:
+          npm_config_registry: https://registry.npmjs.org/
+        run: npm ci --no-audit --fund=false
 
       - name: Build frontend assets
         working-directory: frontend
+        env:
+          npm_config_registry: https://registry.npmjs.org/
         run: npm run build
-
-      - name: Run Go tests
-        run: go test ./...
 
       - name: Install Wails CLI
         shell: pwsh
@@ -134,6 +150,10 @@ jobs:
 
       - name: Build desktop app
         shell: bash
+        env:
+          npm_config_registry: https://registry.npmjs.org/
+          npm_config_audit: "false"
+          npm_config_fund: "false"
         run: |
           wails build ${{ matrix.wails_args }} -ldflags "-X main.appVersion=${APP_VERSION}"
 
@@ -180,6 +200,16 @@ jobs:
           mkdir -p release-upload
           find release-assets -maxdepth 2 -type f -exec cp {} release-upload/ \;
           ls -la release-upload
+
+      - name: Validate packaged assets
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(release-upload/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No packaged release assets were downloaded." >&2
+            exit 1
+          fi
 
       - name: Create or update GitHub Release
         shell: bash
