@@ -1,0 +1,190 @@
+name: Release Cross Platform
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          default_version="$(node -p "const fs=require('fs'); const cfg=JSON.parse(fs.readFileSync('wails.json','utf8')); (cfg.info && cfg.info.productVersion) || '1.0.0'")"
+          if [[ ! "$default_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid default version: $default_version" >&2
+            exit 1
+          fi
+
+          head_tag="$(git tag --points-at "$GITHUB_SHA" --list 'v*' --sort=-version:refname | head -n1)"
+          if [[ -n "$head_tag" ]]; then
+            version="${head_tag#v}"
+          else
+            latest_tag="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
+            if [[ -z "$latest_tag" ]]; then
+              version="$default_version"
+            else
+              latest="${latest_tag#v}"
+              IFS='.' read -r major minor patch <<< "$latest"
+              version="${major}.${minor}.$((patch + 1))"
+            fi
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            label: linux-amd64
+            wails_args: -clean -platform linux/amd64 -tags webkit2_41
+            asset_ext: tar.gz
+          - runner: windows-2022
+            label: windows-amd64
+            wails_args: -clean -platform windows/amd64
+            asset_ext: zip
+          - runner: macos-15-intel
+            label: macos-amd64
+            wails_args: -clean -platform darwin/amd64
+            asset_ext: tar.gz
+          - runner: macos-15
+            label: macos-arm64
+            wails_args: -clean -platform darwin/arm64
+            asset_ext: tar.gz
+
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      ASSET_NAME: CodexSwitch-${{ needs.prepare.outputs.version }}-${{ matrix.label }}.${{ matrix.asset_ext }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libglib2.0-dev libwebkit2gtk-4.1-dev
+
+      - name: Apply release version to Wails metadata
+        shell: bash
+        run: |
+          node -e "const fs=require('fs'); const path='wails.json'; const cfg=JSON.parse(fs.readFileSync(path,'utf8')); cfg.info = {...(cfg.info||{}), companyName:'Codex', productName:'CodexSwitch', productVersion:process.env.APP_VERSION, comments:'Built using Wails'}; fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Install Wails CLI
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+          $goBin = Join-Path (go env GOPATH) "bin"
+          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build desktop app
+        shell: bash
+        run: |
+          wails build ${{ matrix.wails_args }} -ldflags "-X main.appVersion=${APP_VERSION}"
+
+      - name: Package release asset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Compress-Archive -Path build/bin/* -DestinationPath ("release-assets/" + $env:ASSET_NAME) -Force
+
+      - name: Package release asset (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          tar -czf "release-assets/${ASSET_NAME}" -C build/bin .
+
+      - name: Upload packaged asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.label }}
+          path: release-assets/${{ env.ASSET_NAME }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish Release
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Download packaged assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Flatten asset directory
+        shell: bash
+        run: |
+          mkdir -p release-upload
+          find release-assets -maxdepth 2 -type f -exec cp {} release-upload/ \;
+          ls -la release-upload
+
+      - name: Create or update GitHub Release
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-upload/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-upload/* \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_TAG" \
+              --generate-notes
+          fi

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -21,11 +22,35 @@ func resolveAppConfigDir(explicit string) (string, error) {
 }
 
 func defaultCodexHomePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
+	home := defaultCodexHomeBase(runtime.GOOS)
+	if home == "" {
 		return ".codex"
 	}
-	return filepath.Join(home, ".codex")
+	return filepath.Clean(filepath.Join(home, ".codex"))
+}
+
+func defaultCodexHomeBase(goos string) string {
+	if goos == "windows" {
+		if userProfile := strings.TrimSpace(os.Getenv("USERPROFILE")); userProfile != "" {
+			return userProfile
+		}
+
+		homeDrive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
+		homePath := strings.TrimSpace(os.Getenv("HOMEPATH"))
+		if homeDrive != "" && homePath != "" {
+			return homeDrive + homePath
+		}
+	}
+
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		return home
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(home)
 }
 
 func (s *Service) loadSettings() (AppSettings, error) {

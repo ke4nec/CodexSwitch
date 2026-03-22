@@ -127,6 +127,10 @@ func (a *App) UpdateSettings(input codexswitch.UpdateSettingsInput) (codexswitch
 	})
 }
 
+func (a *App) GetAppVersion() string {
+	return appVersion
+}
+
 func withAppLock[T any](mu *sync.Mutex, fn func() (T, error)) (T, error) {
 	mu.Lock()
 	defer mu.Unlock()
