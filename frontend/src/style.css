@@ -5,6 +5,10 @@
   --app-surface: rgba(255, 250, 244, 0.9);
   --app-border: rgba(34, 73, 64, 0.14);
   --app-shadow: 0 18px 54px rgba(42, 55, 47, 0.08);
+  --app-page-min-height: 712px;
+  --app-page-min-width: 1320px;
+  --app-table-min-width: 1260px;
+  --app-overview-stats-width: 344px;
   --app-toolbar-height: clamp(52px, 7vh, 58px);
 }
 
@@ -41,8 +45,6 @@ body {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  min-width: 0;
-  min-height: 0;
   overflow: hidden;
 }
 
@@ -244,6 +246,8 @@ body {
 }
 
 .main-shell {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -252,12 +256,12 @@ body {
 .page-shell {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 8px;
   width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  padding: 10px 14px 12px;
+  min-width: var(--app-page-min-width);
+  min-height: var(--app-page-min-height);
+  padding: 10px 14px 14px;
   overflow: hidden;
 }
 
@@ -286,7 +290,8 @@ body {
 .overview-status {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  max-width: calc(100% - var(--app-overview-stats-width) - 12px);
   min-width: 0;
   gap: 6px;
 }
@@ -342,8 +347,9 @@ body {
 
 .hero-stats {
   display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: repeat(2, minmax(124px, 1fr));
+  flex: 0 0 var(--app-overview-stats-width);
+  width: var(--app-overview-stats-width);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -439,7 +445,8 @@ body {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  padding: 10px 14px 6px;
+  gap: 6px;
+  padding: 10px 14px 14px;
   border-radius: 4px;
   overflow: hidden;
 }
@@ -449,8 +456,6 @@ body {
   gap: 14px;
   justify-content: space-between;
   align-items: flex-start;
-  flex: 0 0 auto;
-  margin-bottom: 6px;
 }
 
 .panel-head-copy {
@@ -486,7 +491,7 @@ body {
 
 .profiles-table {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   min-height: 0;
   background: transparent !important;
@@ -503,7 +508,7 @@ body {
 .profiles-table-head table,
 .profiles-table-body table {
   width: 100%;
-  min-width: 1180px;
+  min-width: var(--app-table-min-width);
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
@@ -562,6 +567,10 @@ body {
   width: 72px;
 }
 
+.col-plan {
+  width: 200px;
+}
+
 .col-usage {
   width: 72px;
 }
@@ -579,11 +588,11 @@ body {
 }
 
 .col-updated {
-  width: 112px;
+  width: 60px;
 }
 
 .col-actions {
-  width: 320px;
+  width: 280px;
 }
 
 .display-name-column,
@@ -597,7 +606,7 @@ body {
 }
 
 .plan-column {
-  width: auto;
+  width: 200px;
 }
 
 .is-active-row {
@@ -633,7 +642,8 @@ body {
 
 .plan-cell {
   display: block;
-  max-width: 400px;
+  width: 100%;
+  max-width: none;
   overflow: hidden;
   cursor: copy;
   user-select: none;
@@ -683,7 +693,7 @@ body {
   flex-wrap: nowrap;
   gap: 4px;
   width: 100%;
-  min-width: 308px;
+  min-width: 268px;
 }
 
 .row-action-btn {
@@ -704,14 +714,26 @@ body {
   gap: 2px;
 }
 
+.profiles-table-head .updated-column,
+.profiles-table-body .updated-column {
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}
+
+.profiles-table-head .updated-column {
+  font-size: 10px !important;
+  letter-spacing: 0.04em;
+  white-space: normal;
+}
+
 .updated-date {
   font-weight: 700;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .updated-time {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .latency-cell {
@@ -788,7 +810,7 @@ body {
 
   .page-shell {
     gap: 6px;
-    padding: 8px 12px 10px;
+    padding: 8px 12px 12px;
   }
 
   .hero-panel {
@@ -841,7 +863,7 @@ body {
   }
 
   .table-panel {
-    padding: 8px 12px 4px;
+    padding: 8px 12px 12px;
   }
 
   .profiles-table-head th {
@@ -894,7 +916,7 @@ body {
 
   .page-shell {
     gap: 5px;
-    padding: 6px 10px 8px;
+    padding: 6px 10px 10px;
   }
 
   .overview-panel {
@@ -943,7 +965,7 @@ body {
   }
 
   .table-panel {
-    padding: 6px 10px 4px;
+    padding: 6px 10px 10px;
   }
 
   .profiles-table-head th {

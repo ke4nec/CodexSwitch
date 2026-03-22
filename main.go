@@ -15,6 +15,16 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+const (
+	minPageWidth                = 1320
+	minPageHeight               = 712
+	minToolbarHeight            = 58
+	windowChromeWidthAllowance  = 20
+	windowChromeHeightAllowance = 46
+	minWindowWidth              = minPageWidth + windowChromeWidthAllowance
+	minWindowHeight             = minPageHeight + minToolbarHeight + windowChromeHeightAllowance
+)
+
 func resolveWebviewUserDataPath() string {
 	cacheDir, err := os.UserCacheDir()
 	if err == nil && cacheDir != "" {
@@ -34,10 +44,10 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:     "CodexSwitch",
-		Width:     1280,
-		Height:    1024,
-		MinWidth:  1200,
-		MinHeight: 864,
+		Width:     minWindowWidth,
+		Height:    minWindowHeight,
+		MinWidth:  minWindowWidth,
+		MinHeight: minWindowHeight,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
