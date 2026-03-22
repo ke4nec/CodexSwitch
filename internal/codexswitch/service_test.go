@@ -65,6 +65,63 @@ func TestGetAppStateAutoImportsCurrentCLIProfile(t *testing.T) {
 	}
 }
 
+func TestGetAppStateRepairsCurrentOfficialConfigWhenBaseURLIsActive(t *testing.T) {
+	service := newTestService(t)
+	codexHome := prepareCodexHomeWithFiles(t, "codex", "auth.json", "config.toml")
+	writeFileFromSample(t, filepath.Join(codexHome, "config.toml"), "api", "config.toml")
+
+	backupConfigRaw := `model = "gpt-5.4"
+model_reasoning_effort = "medium"
+[windows]
+sandbox = "elevated"
+`
+	if err := safeWriteText(service.sharedOfficialConfigPath(), backupConfigRaw); err != nil {
+		t.Fatalf("safeWriteText shared official config failed: %v", err)
+	}
+	if err := service.saveSettings(AppSettings{CodexHomePath: codexHome}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	state, err := service.GetAppState()
+	if err != nil {
+		t.Fatalf("GetAppState returned error: %v", err)
+	}
+
+	if state.Current.Type != ProfileTypeOfficial {
+		t.Fatalf("expected official current type, got %s", state.Current.Type)
+	}
+	if len(state.Profiles) != 1 {
+		t.Fatalf("expected 1 profile, got %d", len(state.Profiles))
+	}
+
+	currentConfigRaw, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("read repaired current config.toml failed: %v", err)
+	}
+	if strings.TrimSpace(string(currentConfigRaw)) != strings.TrimSpace(backupConfigRaw) {
+		t.Fatalf("expected current config.toml to be replaced with backup official config, got %s", string(currentConfigRaw))
+	}
+
+	sharedConfigRaw, err := os.ReadFile(service.sharedOfficialConfigPath())
+	if err != nil {
+		t.Fatalf("read shared official config failed: %v", err)
+	}
+	if strings.TrimSpace(string(sharedConfigRaw)) != strings.TrimSpace(backupConfigRaw) {
+		t.Fatalf("expected shared official config to remain backup config, got %s", string(sharedConfigRaw))
+	}
+
+	stored, err := service.loadProfile(state.Profiles[0].ID)
+	if err != nil {
+		t.Fatalf("loadProfile failed: %v", err)
+	}
+	if strings.TrimSpace(stored.ConfigRaw) != strings.TrimSpace(backupConfigRaw) {
+		t.Fatalf("expected stored official config to use backup config, got %s", stored.ConfigRaw)
+	}
+	if stored.Meta.BaseURL != "" {
+		t.Fatalf("expected repaired official profile to clear api base url, got %s", stored.Meta.BaseURL)
+	}
+}
+
 func TestCreateAndSwitchAPIProfile(t *testing.T) {
 	service := newTestService(t)
 	codexHome := prepareCodexHome(t, "codex")

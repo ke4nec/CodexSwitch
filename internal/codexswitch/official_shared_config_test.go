@@ -152,6 +152,9 @@ sandbox = "elevated"
 
 func TestImportOfficialProfileFileUsesExistingSharedConfig(t *testing.T) {
 	service := newTestService(t)
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
 
 	sharedConfigRaw := `model = "gpt-5.4"
 model_reasoning_effort = "medium"

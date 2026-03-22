@@ -55,6 +55,25 @@ func parseConfigTOML(raw string) parsedConfig {
 	return cfg
 }
 
+func hasActiveBaseURLLine(raw string) bool {
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	for scanner.Scan() {
+		line := strings.TrimSpace(stripTOMLComment(scanner.Text()))
+		if line == "" {
+			continue
+		}
+
+		key, _, ok := splitTOMLAssignment(line)
+		if !ok {
+			continue
+		}
+		if key == "base_url" || strings.HasSuffix(key, ".base_url") {
+			return true
+		}
+	}
+	return false
+}
+
 func stripTOMLComment(line string) string {
 	var builder strings.Builder
 	inQuotes := false

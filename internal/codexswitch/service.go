@@ -80,6 +80,9 @@ func (s *Service) ImportCurrentProfile() (AppState, error) {
 	if err != nil {
 		return AppState{}, err
 	}
+	if err := s.repairCurrentOfficialConfigIfNeeded(settings.CodexHomePath); err != nil {
+		return AppState{}, err
+	}
 	_, snapshot := s.scanCurrentProfile(settings.CodexHomePath)
 	if snapshot == nil || !snapshot.Meta.IsValid {
 		return AppState{}, fmt.Errorf("当前配置不可导入，请先检查 auth.json 和 config.toml")
@@ -333,6 +336,11 @@ func (s *Service) syncAndBuildState(autoSyncCurrent bool) (AppState, error) {
 	if err := s.saveSettings(settings); err != nil {
 		return AppState{}, fmt.Errorf("更新 settings.json 失败: %w", err)
 	}
+	if autoSyncCurrent {
+		if err := s.repairCurrentOfficialConfigIfNeeded(settings.CodexHomePath); err != nil {
+			return AppState{}, err
+		}
+	}
 
 	current, currentSnapshot := s.scanCurrentProfile(settings.CodexHomePath)
 	if autoSyncCurrent && currentSnapshot != nil && currentSnapshot.Meta.IsValid {
@@ -490,4 +498,58 @@ func (s *Service) fallbackCurrentOfficialConfigRaw(authRaw string) (string, erro
 	}
 
 	return s.sharedOfficialConfigRaw("")
+}
+
+func (s *Service) repairCurrentOfficialConfigIfNeeded(codexHomePath string) error {
+	if strings.TrimSpace(codexHomePath) == "" {
+		return nil
+	}
+
+	authPath := filepath.Join(codexHomePath, "auth.json")
+	configPath := filepath.Join(codexHomePath, "config.toml")
+
+	authRaw, err := readTextFile(authPath)
+	if err != nil {
+		if isNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("读取当前 auth.json 失败: %w", err)
+	}
+
+	configRaw, err := readTextFile(configPath)
+	if err != nil {
+		if isNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("读取当前 config.toml 失败: %w", err)
+	}
+
+	normalizedAuthRaw, _, err := normalizeAuthJSON(authRaw)
+	if err != nil {
+		return err
+	}
+
+	var auth authFile
+	if err := json.Unmarshal([]byte(normalizedAuthRaw), &auth); err != nil {
+		return nil
+	}
+	if detectProfileType(auth) != ProfileTypeOfficial {
+		return nil
+	}
+	if !hasActiveBaseURLLine(configRaw) {
+		return nil
+	}
+
+	backupConfigRaw, err := s.sharedOfficialConfigRaw("")
+	if err != nil {
+		return fmt.Errorf("读取官方备份 config.toml 失败: %w", err)
+	}
+	if normalizeConfigRaw(configRaw) == normalizeConfigRaw(backupConfigRaw) {
+		return nil
+	}
+
+	if err := safeWriteText(configPath, backupConfigRaw); err != nil {
+		return fmt.Errorf("替换当前官方 config.toml 失败: %w", err)
+	}
+	return nil
 }
