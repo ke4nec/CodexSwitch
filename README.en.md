@@ -5,6 +5,14 @@
 # CodexSwitch
 
 <p align="center">
+  <img src="./build/appicon.png" alt="CodexSwitch Logo" width="120" />
+</p>
+
+<p align="center">
+  <strong>Codex profile manager, Codex account switcher, and OpenAI API configuration desktop app</strong>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Desktop-Wails%20App-2f855a?style=for-the-badge" alt="Desktop App" />
   <img src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.26+" />
   <img src="https://img.shields.io/badge/Node.js-22.x-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js 22.x" />
@@ -21,9 +29,34 @@
   <img src="https://img.shields.io/badge/Language-English-3b82f6?style=flat-square" alt="Language English" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/ke4nec/CodexSwitch/releases"><img src="https://img.shields.io/github/v/release/ke4nec/CodexSwitch?style=flat-square" alt="Latest Release" /></a>
+  <a href="https://github.com/ke4nec/CodexSwitch/stargazers"><img src="https://img.shields.io/github/stars/ke4nec/CodexSwitch?style=flat-square" alt="GitHub Stars" /></a>
+  <a href="https://github.com/ke4nec/CodexSwitch/issues"><img src="https://img.shields.io/github/issues/ke4nec/CodexSwitch?style=flat-square" alt="GitHub Issues" /></a>
+  <a href="https://github.com/ke4nec/CodexSwitch/releases"><img src="https://img.shields.io/github/downloads/ke4nec/CodexSwitch/total?style=flat-square" alt="GitHub Downloads" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ke4nec/CodexSwitch/releases">Download</a> ·
+  <a href="./CONTRIBUTING.md">Contributing</a>
+</p>
+
 CodexSwitch is a cross-platform desktop application for managing multiple Codex configurations.
 
 It connects your active Codex home directory with a locally managed profile library, so you can switch between official accounts and custom API setups without manually editing `auth.json` or `config.toml`.
+
+## Preview
+
+<p align="center">
+  <img src="./docs/preview.png" alt="CodexSwitch Preview" width="100%" />
+</p>
+
+If you are searching for any of the following, this project is likely relevant:
+- Codex profile manager
+- Codex account switcher
+- Codex multi-account desktop app
+- OpenAI API profile manager
+- cross-platform Codex desktop app for Windows, macOS, and Linux
 
 ---
 
@@ -36,6 +69,23 @@ CodexSwitch is useful when you need to:
 - maintain several `API Key`, model, and reasoning-effort combinations
 - quickly inspect quota, status, and availability
 - avoid repeated manual edits inside `~/.codex`
+
+### Who It Is For
+
+- individual users switching between multiple official Codex accounts
+- developers managing both official Codex access and OpenAI API keys
+- desktop users looking for a visual Codex configuration switcher
+- teams that want the same workflow across Windows, macOS, and Linux
+
+### Search Keywords
+
+- CodexSwitch
+- Codex profile manager
+- Codex account switcher
+- Codex desktop app
+- OpenAI API profile manager
+- multi-account manager for Codex
+- Wails desktop app
 
 ---
 

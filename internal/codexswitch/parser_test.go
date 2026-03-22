@@ -67,7 +67,7 @@ func TestNormalizeCLIOfficialAuthSample(t *testing.T) {
 	if snapshot.Meta.Type != ProfileTypeOfficial {
 		t.Fatalf("expected official profile, got %s", snapshot.Meta.Type)
 	}
-	if snapshot.Meta.Email != "codex_001@proton.me" {
+	if snapshot.Meta.Email != "cli-user@example.com" {
 		t.Fatalf("unexpected email: %s", snapshot.Meta.Email)
 	}
 }
@@ -107,7 +107,7 @@ func TestBuildProfileSnapshotOfficialSample(t *testing.T) {
 	if snapshot.Meta.Type != ProfileTypeOfficial {
 		t.Fatalf("expected official profile, got %s", snapshot.Meta.Type)
 	}
-	if snapshot.Meta.Email != "minyox2025@gmail.com" {
+	if snapshot.Meta.Email != "official-team@example.com" {
 		t.Fatalf("unexpected email: %s", snapshot.Meta.Email)
 	}
 	if snapshot.Meta.PlanType != "team" {
@@ -136,7 +136,7 @@ func TestBuildProfileSnapshotAPISample(t *testing.T) {
 	if snapshot.Meta.Type != ProfileTypeAPI {
 		t.Fatalf("expected api profile, got %s", snapshot.Meta.Type)
 	}
-	if snapshot.Meta.BaseURL != "https://hivewa.store/v1" {
+	if snapshot.Meta.BaseURL != "https://api.example.com/v1" {
 		t.Fatalf("unexpected base url: %s", snapshot.Meta.BaseURL)
 	}
 	if snapshot.Meta.ModelReasoningEffort != "xhigh" {

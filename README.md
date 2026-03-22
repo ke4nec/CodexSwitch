@@ -5,6 +5,14 @@
 # CodexSwitch
 
 <p align="center">
+  <img src="./build/appicon.png" alt="CodexSwitch Logo" width="120" />
+</p>
+
+<p align="center">
+  <strong>Codex 配置管理器 / Codex 账号切换器 / OpenAI API 配置切换桌面工具</strong>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Desktop-Wails%20App-2f855a?style=for-the-badge" alt="Desktop App" />
   <img src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.26+" />
   <img src="https://img.shields.io/badge/Node.js-22.x-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js 22.x" />
@@ -21,9 +29,34 @@
   <img src="https://img.shields.io/badge/Language-中文-ef4444?style=flat-square" alt="Language Chinese" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/ke4nec/CodexSwitch/releases"><img src="https://img.shields.io/github/v/release/ke4nec/CodexSwitch?style=flat-square" alt="Latest Release" /></a>
+  <a href="https://github.com/ke4nec/CodexSwitch/stargazers"><img src="https://img.shields.io/github/stars/ke4nec/CodexSwitch?style=flat-square" alt="GitHub Stars" /></a>
+  <a href="https://github.com/ke4nec/CodexSwitch/issues"><img src="https://img.shields.io/github/issues/ke4nec/CodexSwitch?style=flat-square" alt="GitHub Issues" /></a>
+  <a href="https://github.com/ke4nec/CodexSwitch/releases"><img src="https://img.shields.io/github/downloads/ke4nec/CodexSwitch/total?style=flat-square" alt="GitHub Downloads" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ke4nec/CodexSwitch/releases">下载发布版</a> ·
+  <a href="./CONTRIBUTING.md">参与贡献</a>
+</p>
+
 CodexSwitch 是一个用于管理多个 Codex 配置的跨平台桌面工具。
 
 它把“当前正在使用的 Codex 配置目录”和“本地托管的多个账号/API 配置”连接起来，让你可以在官方账号与自定义 API 配置之间快速切换、统一查看状态，并减少手工修改 `auth.json` / `config.toml` 的负担。
+
+## 界面预览
+
+<p align="center">
+  <img src="./docs/preview.png" alt="CodexSwitch 界面预览" width="100%" />
+</p>
+
+如果你在搜索下面这些内容，这个项目就是为你准备的：
+- Codex 配置管理器
+- Codex 多账号切换工具
+- Codex 官方账号与 API 配置切换
+- OpenAI API 配置管理桌面应用
+- Windows / macOS / Linux 跨平台 Codex 桌面工具
 
 ---
 
@@ -36,6 +69,23 @@ CodexSwitch 是一个用于管理多个 Codex 配置的跨平台桌面工具。
 - 同时维护多个 `API Key`、模型和推理强度组合
 - 快速确认账号额度、状态和可用性
 - 不想反复手工修改 `~/.codex` 目录下的文件
+
+### 适合谁
+
+- 经常在多个 Codex 官方账号之间切换的个人用户
+- 同时维护官方账号和 OpenAI API Key 的开发者
+- 想要一个可视化 Codex 配置切换工具的桌面用户
+- 需要在 Windows、macOS、Linux 上统一使用同一套配置的团队成员
+
+### 搜索关键词
+
+- CodexSwitch
+- Codex 配置管理
+- Codex 账号切换
+- Codex profile manager
+- Codex account switcher
+- OpenAI API profile manager
+- Wails desktop app
 
 ---
 

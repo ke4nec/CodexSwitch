@@ -349,7 +349,7 @@ func TestRefreshAPILatencyTests(t *testing.T) {
 			writer.WriteHeader(http.StatusNotFound)
 			return
 		}
-		if request.Header.Get("Authorization") != "Bearer sk-83ef0e7cd03053710160d7841374de2710020ba5fcc40c1ccd3699c160af9bfe" {
+		if request.Header.Get("Authorization") != "Bearer sk-test-public-sample-key-0001" {
 			writer.WriteHeader(http.StatusUnauthorized)
 			return
 		}
