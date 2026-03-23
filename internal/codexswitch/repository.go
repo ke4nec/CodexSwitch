@@ -175,6 +175,7 @@ func normalizeStoredProfileMeta(profile *storedProfile) {
 	if profile.Meta.LatencyTest.Status == "" {
 		profile.Meta.LatencyTest.Status = LatencyTestStatusIdle
 	}
+	profile.Meta.LatencyTest.History = trimLatencyHistoryEntries(profile.Meta.LatencyTest.History)
 
 	config := parseConfigTOML(profile.ConfigRaw)
 	if strings.TrimSpace(config.BaseURL) != "" {

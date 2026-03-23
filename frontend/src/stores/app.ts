@@ -38,6 +38,7 @@ const defaultApiForm = (): APIProfileInput => ({
 });
 
 const activeOfficialProfileRefreshIntervalMs = 5 * 60 * 1000;
+const apiProfileAvailabilityRefreshIntervalMs = 5 * 60 * 1000;
 const defaultProfileSort: ProfileSortState = {
   key: 'updatedAt',
   direction: 'desc',
@@ -51,6 +52,7 @@ const defaultSortDirectionByKey: Record<ProfileSortKey, SortDirection> = {
 };
 
 let activeOfficialProfileRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let apiProfileAvailabilityRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 function getRemainingUsagePercent(window?: RateLimitWindow) {
   if (!window || typeof window.usedPercent !== 'number' || !Number.isFinite(window.usedPercent)) {
@@ -200,9 +202,15 @@ export const useAppStore = defineStore('app', {
           void this.refreshActiveOfficialProfile(false);
         }, activeOfficialProfileRefreshIntervalMs);
       }
+      if (!apiProfileAvailabilityRefreshTimer) {
+        apiProfileAvailabilityRefreshTimer = setInterval(() => {
+          void this.refreshApiProfileAvailability(false);
+        }, apiProfileAvailabilityRefreshIntervalMs);
+      }
 
       await this.loadAppState(false);
       void this.refreshActiveOfficialProfile(false);
+      void this.refreshApiProfileAvailability(false);
     },
 
     async loadAppState(showSuccess = false) {
@@ -395,6 +403,28 @@ export const useAppStore = defineStore('app', {
         this.notify(this.formatError(error), 'error');
       } finally {
         this.testingLatencyProfileIds = this.testingLatencyProfileIds.filter((id) => id !== profile.id);
+      }
+    },
+
+    async refreshApiProfileAvailability(showSuccess = false) {
+      const targetIds = this.appState.profiles
+        .filter((profile) => profile.type === 'api' && !this.testingLatencyProfileIds.includes(profile.id))
+        .map((profile) => profile.id);
+
+      if (targetIds.length === 0) {
+        return;
+      }
+
+      this.testingLatencyProfileIds = [...new Set([...this.testingLatencyProfileIds, ...targetIds])];
+      try {
+        this.appState = await backend.refreshApiLatencyTests(targetIds);
+        if (showSuccess) {
+          this.notify(translate('notifications.apiAvailabilityRefreshed'));
+        }
+      } catch (error) {
+        this.notify(this.formatError(error), 'error');
+      } finally {
+        this.testingLatencyProfileIds = this.testingLatencyProfileIds.filter((id) => !targetIds.includes(id));
       }
     },
 

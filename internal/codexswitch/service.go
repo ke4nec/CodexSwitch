@@ -311,6 +311,7 @@ func (s *Service) RefreshAPILatencyTests(ids []string) (AppState, error) {
 				ErrorMessage: err.Error(),
 				CheckedAt:    s.now().UTC().Format(time.RFC3339),
 			}
+			appendLatencyTestHistory(&updated.Meta.LatencyTest)
 			updated.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		}
 

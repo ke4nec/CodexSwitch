@@ -727,6 +727,72 @@ body {
   user-select: text;
 }
 
+.plan-column {
+  vertical-align: top;
+}
+
+.plan-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.connectivity-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+}
+
+.connectivity-dot {
+  width: 4px;
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 4px;
+  background: #bbc6cf;
+  cursor: help;
+}
+
+.connectivity-dot-success {
+  background: #18915f;
+}
+
+.connectivity-dot-failure {
+  background: #cc5146;
+}
+
+.connectivity-dot:focus-visible {
+  outline: 1px solid rgba(23, 94, 154, 0.82);
+  outline-offset: 2px;
+}
+
+.history-tooltip-overlay {
+  background: rgba(18, 24, 29, 0.74) !important;
+  color: #f3f7fa !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px rgba(6, 14, 20, 0.22);
+}
+
+.connectivity-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 168px;
+  max-width: 280px;
+}
+
+.connectivity-tooltip-line {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .model-cell {
   min-width: 80px;
   overflow: hidden;

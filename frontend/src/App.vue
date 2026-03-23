@@ -245,26 +245,55 @@
 
                       <td class="plan-column">
                         <template v-if="planOrURL(profile) !== EMPTY_VALUE">
-                          <v-tooltip location="top">
-                            <template #activator="{ props }">
-                              <div
-                                v-bind="props"
-                                class="plan-cell"
-                                @contextmenu.prevent="copyText(planOrURL(profile), t('common.copied'))"
+                          <div class="plan-stack">
+                            <v-tooltip location="top">
+                              <template #activator="{ props }">
+                                <div
+                                  v-bind="props"
+                                  class="plan-cell"
+                                  @contextmenu.prevent="copyText(planOrURL(profile), t('common.copied'))"
+                                >
+                                  <template v-if="profile.type === 'api'">
+                                    <span
+                                      class="plan-host"
+                                      :class="`plan-host-${apiURLDisplay(profile).protocolTone}`"
+                                    >
+                                      {{ apiURLDisplay(profile).host }}
+                                    </span>
+                                  </template>
+                                  <span v-else class="plan-text">{{ planOrURL(profile) }}</span>
+                                </div>
+                              </template>
+                              <span>{{ planOrURL(profile) }}</span>
+                            </v-tooltip>
+                            <div v-if="shouldShowConnectivityHistory(profile)" class="connectivity-history">
+                              <v-tooltip
+                                v-for="(entry, index) in connectivityHistory(profile)"
+                                :key="connectivityHistoryKey(entry, index)"
+                                location="top"
+                                content-class="history-tooltip-overlay"
                               >
-                                <template v-if="profile.type === 'api'">
-                                  <span
-                                    class="plan-host"
-                                    :class="`plan-host-${apiURLDisplay(profile).protocolTone}`"
-                                  >
-                                    {{ apiURLDisplay(profile).host }}
-                                  </span>
+                                <template #activator="{ props }">
+                                  <button
+                                    v-bind="props"
+                                    type="button"
+                                    class="connectivity-dot"
+                                    :class="connectivityDotClass(entry)"
+                                    :aria-label="connectivityHistoryTooltip(entry)"
+                                  ></button>
                                 </template>
-                                <span v-else class="plan-text">{{ planOrURL(profile) }}</span>
-                              </div>
-                            </template>
-                            <span>{{ planOrURL(profile) }}</span>
-                          </v-tooltip>
+                                <div class="connectivity-tooltip">
+                                  <div
+                                    v-for="(line, lineIndex) in connectivityHistoryTooltipLines(entry)"
+                                    :key="`${connectivityHistoryKey(entry, index)}-${lineIndex}`"
+                                    class="connectivity-tooltip-line"
+                                  >
+                                    {{ line }}
+                                  </div>
+                                </div>
+                              </v-tooltip>
+                            </div>
+                          </div>
                         </template>
                         <span v-else class="plan-cell plan-cell-empty">{{ EMPTY_VALUE }}</span>
                       </td>
@@ -423,7 +452,7 @@ import ConfirmDialog from './components/ConfirmDialog.vue';
 import SettingsDialog from './components/SettingsDialog.vue';
 import { useI18n } from './i18n';
 import { useAppStore } from './stores/app';
-import type { ProfileMeta, ProfileSortKey, RateLimitWindow } from './types';
+import type { LatencyHistoryEntry, ProfileMeta, ProfileSortKey, RateLimitWindow } from './types';
 
 const EMPTY_VALUE = '-';
 
@@ -724,6 +753,106 @@ interface URLDisplay {
 
 function apiURLDisplay(profile: ProfileMeta): URLDisplay {
   return formatURLDisplay(profile.baseURL);
+}
+
+function connectivityHistory(profile: ProfileMeta) {
+  if (profile.type !== 'api') {
+    return [];
+  }
+  return profile.latencyTest.history ?? [];
+}
+
+function shouldShowConnectivityHistory(profile: ProfileMeta) {
+  return connectivityHistory(profile).length > 0;
+}
+
+function connectivityDotClass(entry: LatencyHistoryEntry) {
+  return entry.status === 'success' && entry.available ? 'connectivity-dot-success' : 'connectivity-dot-failure';
+}
+
+function connectivityHistoryKey(entry: LatencyHistoryEntry, index: number) {
+  return `${entry.checkedAt || 'pending'}-${entry.status}-${entry.statusCode ?? 'na'}-${index}`;
+}
+
+function connectivityHistoryTooltip(entry: LatencyHistoryEntry) {
+  return connectivityHistoryTooltipLines(entry).join(' | ');
+}
+
+function connectivityHistoryMessage(entry: LatencyHistoryEntry) {
+  if (entry.status === 'error') {
+    return entry.errorMessage || t('profiles.latency.failedDefault');
+  }
+  if (entry.available) {
+    return t('profiles.latency.accountAvailable');
+  }
+  if (entry.errorMessage) {
+    return entry.errorMessage;
+  }
+  if (entry.statusCode) {
+    return t('profiles.latency.unavailableWithStatus', { statusCode: entry.statusCode });
+  }
+  return t('profiles.latency.accountUnavailable');
+}
+
+function connectivityHistoryTooltipLines(entry: LatencyHistoryEntry) {
+  const lines = [] as string[];
+
+  if (entry.checkedAt) {
+    lines.push(t('profiles.latency.checkedAt', { time: formatDateTime(entry.checkedAt) }));
+  }
+
+  lines.push(
+    t('profiles.latency.tooltipResult', {
+      result: connectivityHistoryResultText(entry),
+    }),
+  );
+
+  if (typeof entry.latencyMs === 'number' && entry.latencyMs > 0) {
+    lines.push(
+      t('profiles.latency.tooltipLatency', {
+        latency: `${Math.round(entry.latencyMs)} ms`,
+      }),
+    );
+  }
+
+  if (!entry.available) {
+    if (entry.errorType) {
+      lines.push(
+        t('profiles.latency.tooltipType', {
+          type: entry.errorType,
+        }),
+      );
+    }
+    if (entry.errorMessage) {
+      lines.push(
+        t('profiles.latency.tooltipMessage', {
+          message: entry.errorMessage,
+        }),
+      );
+    }
+    if (entry.errorCode) {
+      lines.push(
+        t('profiles.latency.tooltipCode', {
+          code: entry.errorCode,
+        }),
+      );
+    }
+    if (entry.statusCode) {
+      lines.push(`HTTP ${entry.statusCode}`);
+    }
+  }
+
+  return lines;
+}
+
+function connectivityHistoryResultText(entry: LatencyHistoryEntry) {
+  if (entry.status === 'error') {
+    return t('profiles.latency.tooltipResultFailed');
+  }
+  if (entry.available) {
+    return t('profiles.latency.tooltipResultAvailable');
+  }
+  return t('profiles.latency.tooltipResultUnavailable');
 }
 
 function formatURLDisplay(value?: string): URLDisplay {

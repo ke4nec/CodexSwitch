@@ -26,6 +26,17 @@ const (
 	LatencyTestStatusError   LatencyTestStatus = "error"
 )
 
+type LatencyHistoryEntry struct {
+	Status       LatencyTestStatus `json:"status"`
+	Available    bool              `json:"available"`
+	LatencyMs    *int64            `json:"latencyMs,omitempty"`
+	StatusCode   *int              `json:"statusCode,omitempty"`
+	ErrorMessage string            `json:"errorMessage,omitempty"`
+	ErrorType    string            `json:"errorType,omitempty"`
+	ErrorCode    string            `json:"errorCode,omitempty"`
+	CheckedAt    string            `json:"checkedAt,omitempty"`
+}
+
 type AppSettings struct {
 	CodexHomePath string `json:"codexHomePath"`
 	LastOpenedAt  string `json:"lastOpenedAt"`
@@ -45,12 +56,15 @@ type RateLimitState struct {
 }
 
 type LatencyTestState struct {
-	Status       LatencyTestStatus `json:"status"`
-	Available    bool              `json:"available"`
-	LatencyMs    *int64            `json:"latencyMs,omitempty"`
-	StatusCode   *int              `json:"statusCode,omitempty"`
-	ErrorMessage string            `json:"errorMessage,omitempty"`
-	CheckedAt    string            `json:"checkedAt,omitempty"`
+	Status       LatencyTestStatus     `json:"status"`
+	Available    bool                  `json:"available"`
+	LatencyMs    *int64                `json:"latencyMs,omitempty"`
+	StatusCode   *int                  `json:"statusCode,omitempty"`
+	ErrorMessage string                `json:"errorMessage,omitempty"`
+	ErrorType    string                `json:"errorType,omitempty"`
+	ErrorCode    string                `json:"errorCode,omitempty"`
+	CheckedAt    string                `json:"checkedAt,omitempty"`
+	History      []LatencyHistoryEntry `json:"history,omitempty"`
 }
 
 type ProfileMeta struct {

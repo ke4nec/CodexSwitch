@@ -19,7 +19,14 @@ type apiProbeErrorPayload struct {
 	} `json:"error"`
 }
 
+type apiProbeFailureInfo struct {
+	Message string
+	Type    string
+	Code    string
+}
+
 const latencyTestPrompt = "hi"
+const maxLatencyHistoryEntries = 48
 
 func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfile, error) {
 	if profile.Meta.Type == ProfileTypeOfficial {
@@ -68,8 +75,12 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		profile.Meta.LatencyTest.ErrorMessage = formatAPIProbeFailure(resp.StatusCode, resp.Status, responseBody)
+		failureInfo := extractAPIProbeFailure(resp.StatusCode, resp.Status, responseBody)
+		profile.Meta.LatencyTest.ErrorMessage = failureInfo.Message
+		profile.Meta.LatencyTest.ErrorType = failureInfo.Type
+		profile.Meta.LatencyTest.ErrorCode = failureInfo.Code
 	}
+	appendLatencyTestHistory(&profile.Meta.LatencyTest)
 
 	profile.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	return profile, nil
@@ -215,16 +226,23 @@ func apiEndpointURL(baseURL, endpointPath string) (string, error) {
 	return parsed.String(), nil
 }
 
-func formatAPIProbeFailure(statusCode int, status string, body []byte) string {
+func extractAPIProbeFailure(statusCode int, status string, body []byte) apiProbeFailureInfo {
 	if statusCode <= 0 && strings.TrimSpace(status) == "" {
-		return "延迟测试失败"
+		return apiProbeFailureInfo{Message: "延迟测试失败"}
 	}
 
 	var payload apiProbeErrorPayload
 	if err := json.Unmarshal(body, &payload); err == nil && payload.Error != nil {
-		message := strings.TrimSpace(payload.Error.Message)
-		if message != "" {
-			return fmt.Sprintf("HTTP %d: %s", statusCode, message)
+		info := apiProbeFailureInfo{
+			Message: strings.TrimSpace(payload.Error.Message),
+			Type:    strings.TrimSpace(payload.Error.Type),
+			Code:    normalizeProbeErrorCode(payload.Error.Code),
+		}
+		if info.Message != "" || info.Type != "" || info.Code != "" {
+			if info.Message == "" {
+				info.Message = fmt.Sprintf("HTTP %d", statusCode)
+			}
+			return info
 		}
 	}
 
@@ -232,7 +250,7 @@ func formatAPIProbeFailure(statusCode int, status string, body []byte) string {
 	if statusText == "" {
 		statusText = fmt.Sprintf("HTTP %d", statusCode)
 	}
-	return statusText
+	return apiProbeFailureInfo{Message: statusText}
 }
 
 func optionalInt(value int) *int {
@@ -309,4 +327,65 @@ func formatProbeLogBody(body []byte) string {
 		return string(trimmed[:maxLogBodyLength]) + "...(truncated)"
 	}
 	return string(trimmed)
+}
+
+func appendLatencyTestHistory(state *LatencyTestState) {
+	if state == nil || strings.TrimSpace(state.CheckedAt) == "" {
+		return
+	}
+
+	entry := LatencyHistoryEntry{
+		Status:       state.Status,
+		Available:    state.Available,
+		LatencyMs:    copyOptionalInt64(state.LatencyMs),
+		StatusCode:   copyOptionalInt(state.StatusCode),
+		ErrorMessage: strings.TrimSpace(state.ErrorMessage),
+		ErrorType:    strings.TrimSpace(state.ErrorType),
+		ErrorCode:    strings.TrimSpace(state.ErrorCode),
+		CheckedAt:    strings.TrimSpace(state.CheckedAt),
+	}
+
+	history := append(trimLatencyHistoryEntries(state.History), entry)
+	state.History = trimLatencyHistoryEntries(history)
+}
+
+func trimLatencyHistoryEntries(history []LatencyHistoryEntry) []LatencyHistoryEntry {
+	if len(history) == 0 {
+		return nil
+	}
+	if len(history) <= maxLatencyHistoryEntries {
+		return history
+	}
+	return history[len(history)-maxLatencyHistoryEntries:]
+}
+
+func copyOptionalInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+func copyOptionalInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+func normalizeProbeErrorCode(value any) string {
+	if value == nil {
+		return ""
+	}
+
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
 }

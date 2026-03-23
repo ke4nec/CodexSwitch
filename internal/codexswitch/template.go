@@ -135,6 +135,7 @@ func preserveStoredFields(next *ProfileMeta, existing *ProfileMeta, now time.Tim
 	if next.LatencyTest.Status == "" {
 		next.LatencyTest.Status = LatencyTestStatusIdle
 	}
+	next.LatencyTest.History = trimLatencyHistoryEntries(next.LatencyTest.History)
 
 	if existing == nil {
 		next.CreatedAt = now.UTC().Format(time.RFC3339)
@@ -172,6 +173,12 @@ func shouldPreserveLatencyTest(next *ProfileMeta, existing *ProfileMeta) bool {
 		return false
 	}
 	if strings.TrimSpace(next.LatencyTest.ErrorMessage) != "" || strings.TrimSpace(next.LatencyTest.CheckedAt) != "" {
+		return false
+	}
+	if strings.TrimSpace(next.LatencyTest.ErrorType) != "" || strings.TrimSpace(next.LatencyTest.ErrorCode) != "" {
+		return false
+	}
+	if len(next.LatencyTest.History) > 0 {
 		return false
 	}
 	return true

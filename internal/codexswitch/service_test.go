@@ -447,6 +447,15 @@ base_url = "%s/v1"
 	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
 		t.Fatalf("expected latency ms to be recorded, got %+v", refreshed.LatencyTest)
 	}
+	if len(refreshed.LatencyTest.History) != 1 {
+		t.Fatalf("expected 1 latency history entry, got %+v", refreshed.LatencyTest.History)
+	}
+	if !refreshed.LatencyTest.History[0].Available {
+		t.Fatalf("expected first history entry to be available, got %+v", refreshed.LatencyTest.History[0])
+	}
+	if refreshed.LatencyTest.History[0].CheckedAt != refreshed.LatencyTest.CheckedAt {
+		t.Fatalf("expected history timestamp to match checkedAt, got %+v", refreshed.LatencyTest.History[0])
+	}
 	if requestMethod != http.MethodPost {
 		t.Fatalf("expected POST request, got %s", requestMethod)
 	}
@@ -479,7 +488,7 @@ func TestRefreshAPILatencyTestsUnauthorized(t *testing.T) {
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusUnauthorized)
-		_, _ = writer.Write([]byte(`{"error":{"message":"Incorrect API key provided"}}`))
+		_, _ = writer.Write([]byte(`{"error":{"message":"Incorrect API key provided","type":"invalid_request_error","code":"invalid_api_key"}}`))
 	}))
 	defer server.Close()
 
@@ -529,6 +538,27 @@ base_url = "%s/v1"
 	}
 	if !strings.Contains(refreshed.LatencyTest.ErrorMessage, "Incorrect API key provided") {
 		t.Fatalf("expected unauthorized message, got %s", refreshed.LatencyTest.ErrorMessage)
+	}
+	if refreshed.LatencyTest.ErrorType != "invalid_request_error" {
+		t.Fatalf("expected error type invalid_request_error, got %s", refreshed.LatencyTest.ErrorType)
+	}
+	if refreshed.LatencyTest.ErrorCode != "invalid_api_key" {
+		t.Fatalf("expected error code invalid_api_key, got %s", refreshed.LatencyTest.ErrorCode)
+	}
+	if len(refreshed.LatencyTest.History) != 1 {
+		t.Fatalf("expected 1 latency history entry, got %+v", refreshed.LatencyTest.History)
+	}
+	if refreshed.LatencyTest.History[0].Available {
+		t.Fatalf("expected unauthorized history entry to be unavailable, got %+v", refreshed.LatencyTest.History[0])
+	}
+	if refreshed.LatencyTest.History[0].StatusCode == nil || *refreshed.LatencyTest.History[0].StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected history status code 401, got %+v", refreshed.LatencyTest.History[0])
+	}
+	if refreshed.LatencyTest.History[0].ErrorType != "invalid_request_error" {
+		t.Fatalf("expected history error type invalid_request_error, got %+v", refreshed.LatencyTest.History[0])
+	}
+	if refreshed.LatencyTest.History[0].ErrorCode != "invalid_api_key" {
+		t.Fatalf("expected history error code invalid_api_key, got %+v", refreshed.LatencyTest.History[0])
 	}
 	if requestMethod != http.MethodPost {
 		t.Fatalf("expected POST request, got %s", requestMethod)
@@ -596,6 +626,54 @@ base_url = "%s/backend-api"
 	}
 	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
 		t.Fatalf("expected latency ms to be recorded, got %+v", refreshed.LatencyTest)
+	}
+}
+
+func TestRefreshAPILatencyTestsBuildErrorStillRecordsHistory(t *testing.T) {
+	service := newTestService(t)
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := `[model_providers.OpenAI]
+base_url = "https://api.openai.com/v1"
+`
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshAPILatencyTests returned error: %v", err)
+	}
+
+	var refreshed ProfileMeta
+	for _, profile := range state.Profiles {
+		if profile.ID == snapshot.Meta.ID {
+			refreshed = profile
+			break
+		}
+	}
+	if refreshed.ID == "" {
+		t.Fatal("expected refreshed api profile in state")
+	}
+	if refreshed.LatencyTest.Status != LatencyTestStatusError {
+		t.Fatalf("expected error latency status, got %s", refreshed.LatencyTest.Status)
+	}
+	if len(refreshed.LatencyTest.History) != 1 {
+		t.Fatalf("expected 1 latency history entry, got %+v", refreshed.LatencyTest.History)
+	}
+	if refreshed.LatencyTest.History[0].Status != LatencyTestStatusError {
+		t.Fatalf("expected error history entry, got %+v", refreshed.LatencyTest.History[0])
+	}
+	if !strings.Contains(refreshed.LatencyTest.History[0].ErrorMessage, "缺少可用 model") {
+		t.Fatalf("expected history error message to mention missing model, got %+v", refreshed.LatencyTest.History[0])
 	}
 }
 

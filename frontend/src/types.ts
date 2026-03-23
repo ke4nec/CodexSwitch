@@ -33,6 +33,20 @@ export interface LatencyTestState {
   latencyMs?: number;
   statusCode?: number;
   errorMessage?: string;
+  errorType?: string;
+  errorCode?: string;
+  checkedAt?: string;
+  history?: LatencyHistoryEntry[];
+}
+
+export interface LatencyHistoryEntry {
+  status: LatencyTestStatus;
+  available: boolean;
+  latencyMs?: number;
+  statusCode?: number;
+  errorMessage?: string;
+  errorType?: string;
+  errorCode?: string;
   checkedAt?: string;
 }
 
