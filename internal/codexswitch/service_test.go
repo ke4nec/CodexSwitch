@@ -2,6 +2,7 @@ package codexswitch
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -377,29 +378,37 @@ base_url = "%s/backend-api"
 
 func TestRefreshAPILatencyTests(t *testing.T) {
 	var (
-		requestMethod string
-		requestBody   map[string]any
+		probeRequestMethod      string
+		probeAuthorization      string
+		availabilityMethod      string
+		availabilityRequestBody map[string]any
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v1/responses" {
+		switch request.URL.Path {
+		case "/":
+			probeRequestMethod = request.Method
+			probeAuthorization = request.Header.Get("Authorization")
+			writer.WriteHeader(http.StatusNoContent)
+		case "/v1/responses":
+			availabilityMethod = request.Method
+			if request.Header.Get("Authorization") != "Bearer sk-test-public-sample-key-0001" {
+				writer.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			time.Sleep(120 * time.Millisecond)
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatalf("read request body failed: %v", err)
+			}
+			if err := json.Unmarshal(body, &availabilityRequestBody); err != nil {
+				t.Fatalf("unmarshal request body failed: %v", err)
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"id":"resp_123","status":"completed","output_text":"hello"}`))
+		default:
 			writer.WriteHeader(http.StatusNotFound)
-			return
 		}
-		requestMethod = request.Method
-		if request.Header.Get("Authorization") != "Bearer sk-test-public-sample-key-0001" {
-			writer.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		body, err := io.ReadAll(request.Body)
-		if err != nil {
-			t.Fatalf("read request body failed: %v", err)
-		}
-		if err := json.Unmarshal(body, &requestBody); err != nil {
-			t.Fatalf("unmarshal request body failed: %v", err)
-		}
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"id":"resp_123","status":"completed","output_text":"hello"}`))
 	}))
 	defer server.Close()
 
@@ -447,6 +456,9 @@ base_url = "%s/v1"
 	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
 		t.Fatalf("expected latency ms to be recorded, got %+v", refreshed.LatencyTest)
 	}
+	if *refreshed.LatencyTest.LatencyMs >= 120 {
+		t.Fatalf("expected latency ms to come from lightweight probe instead of responses request, got %+v", refreshed.LatencyTest.LatencyMs)
+	}
 	if len(refreshed.LatencyTest.History) != 1 {
 		t.Fatalf("expected 1 latency history entry, got %+v", refreshed.LatencyTest.History)
 	}
@@ -456,39 +468,52 @@ base_url = "%s/v1"
 	if refreshed.LatencyTest.History[0].CheckedAt != refreshed.LatencyTest.CheckedAt {
 		t.Fatalf("expected history timestamp to match checkedAt, got %+v", refreshed.LatencyTest.History[0])
 	}
-	if requestMethod != http.MethodPost {
-		t.Fatalf("expected POST request, got %s", requestMethod)
+	if probeRequestMethod != http.MethodGet {
+		t.Fatalf("expected homepage probe GET request, got %s", probeRequestMethod)
 	}
-	if got := strings.TrimSpace(fmt.Sprintf("%v", requestBody["model"])); got != "gpt-5.4" {
-		t.Fatalf("expected model gpt-5.4, got %+v", requestBody["model"])
+	if probeAuthorization != "" {
+		t.Fatalf("expected homepage probe to skip authorization header, got %q", probeAuthorization)
 	}
-	if got := strings.TrimSpace(fmt.Sprintf("%v", requestBody["input"])); got != latencyTestPrompt {
-		t.Fatalf("expected input %q, got %+v", latencyTestPrompt, requestBody["input"])
+	if availabilityMethod != http.MethodPost {
+		t.Fatalf("expected availability POST request, got %s", availabilityMethod)
+	}
+	if got := strings.TrimSpace(fmt.Sprintf("%v", availabilityRequestBody["model"])); got != "gpt-5.4" {
+		t.Fatalf("expected model gpt-5.4, got %+v", availabilityRequestBody["model"])
+	}
+	if got := strings.TrimSpace(fmt.Sprintf("%v", availabilityRequestBody["input"])); got != latencyTestPrompt {
+		t.Fatalf("expected input %q, got %+v", latencyTestPrompt, availabilityRequestBody["input"])
 	}
 }
 
 func TestRefreshAPILatencyTestsUnauthorized(t *testing.T) {
 	var (
-		requestMethod string
-		requestBody   map[string]any
+		probeRequestMethod string
+		probeAuthorization string
+		requestMethod      string
+		requestBody        map[string]any
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v1/responses" {
+		switch request.URL.Path {
+		case "/":
+			probeRequestMethod = request.Method
+			probeAuthorization = request.Header.Get("Authorization")
+			writer.WriteHeader(http.StatusNoContent)
+		case "/v1/responses":
+			requestMethod = request.Method
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatalf("read request body failed: %v", err)
+			}
+			if err := json.Unmarshal(body, &requestBody); err != nil {
+				t.Fatalf("unmarshal request body failed: %v", err)
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusUnauthorized)
+			_, _ = writer.Write([]byte(`{"error":{"message":"Incorrect API key provided","type":"invalid_request_error","code":"invalid_api_key"}}`))
+		default:
 			writer.WriteHeader(http.StatusNotFound)
-			return
 		}
-		requestMethod = request.Method
-		body, err := io.ReadAll(request.Body)
-		if err != nil {
-			t.Fatalf("read request body failed: %v", err)
-		}
-		if err := json.Unmarshal(body, &requestBody); err != nil {
-			t.Fatalf("unmarshal request body failed: %v", err)
-		}
-		writer.Header().Set("Content-Type", "application/json")
-		writer.WriteHeader(http.StatusUnauthorized)
-		_, _ = writer.Write([]byte(`{"error":{"message":"Incorrect API key provided","type":"invalid_request_error","code":"invalid_api_key"}}`))
 	}))
 	defer server.Close()
 
@@ -533,6 +558,9 @@ base_url = "%s/v1"
 	if refreshed.LatencyTest.Available {
 		t.Fatal("expected api profile to be marked unavailable")
 	}
+	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
+		t.Fatalf("expected lightweight latency ms to still be recorded, got %+v", refreshed.LatencyTest)
+	}
 	if refreshed.LatencyTest.StatusCode == nil || *refreshed.LatencyTest.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected status code 401, got %+v", refreshed.LatencyTest.StatusCode)
 	}
@@ -560,6 +588,12 @@ base_url = "%s/v1"
 	if refreshed.LatencyTest.History[0].ErrorCode != "invalid_api_key" {
 		t.Fatalf("expected history error code invalid_api_key, got %+v", refreshed.LatencyTest.History[0])
 	}
+	if probeRequestMethod != http.MethodGet {
+		t.Fatalf("expected homepage probe GET request, got %s", probeRequestMethod)
+	}
+	if probeAuthorization != "" {
+		t.Fatalf("expected homepage probe to skip authorization header, got %q", probeAuthorization)
+	}
 	if requestMethod != http.MethodPost {
 		t.Fatalf("expected POST request, got %s", requestMethod)
 	}
@@ -569,17 +603,20 @@ base_url = "%s/v1"
 }
 
 func TestRefreshOfficialLatencyTests(t *testing.T) {
+	var requestMethod string
+
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/backend-api/wham/usage" {
+		if request.URL.Path != "/v1/models" {
 			writer.WriteHeader(http.StatusNotFound)
 			return
 		}
+		requestMethod = request.Method
 		if !strings.HasPrefix(request.Header.Get("Authorization"), "Bearer ") {
 			writer.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"plan_type":"pro"}`))
+		_, _ = writer.Write([]byte(`{"data":[{"id":"gpt-5.4"}]}`))
 	}))
 	defer server.Close()
 
@@ -626,6 +663,9 @@ base_url = "%s/backend-api"
 	}
 	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
 		t.Fatalf("expected latency ms to be recorded, got %+v", refreshed.LatencyTest)
+	}
+	if requestMethod != http.MethodGet {
+		t.Fatalf("expected GET request, got %s", requestMethod)
 	}
 }
 
@@ -680,19 +720,21 @@ base_url = "https://api.openai.com/v1"
 func TestAutoRefreshAPILatencyTestsAppendRowsAndManualTestUpdatesLatestRow(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v1/responses" {
-			writer.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		callCount++
-		writer.Header().Set("Content-Type", "application/json")
-		switch callCount {
-		case 1, 2:
-			_, _ = writer.Write([]byte(fmt.Sprintf(`{"id":"resp_%d","status":"completed","output_text":"ok"}`, callCount)))
+		switch request.URL.Path {
+		case "/":
+			writer.WriteHeader(http.StatusNoContent)
+		case "/v1/responses":
+			callCount++
+			writer.Header().Set("Content-Type", "application/json")
+			switch callCount {
+			case 1, 2:
+				_, _ = writer.Write([]byte(fmt.Sprintf(`{"id":"resp_%d","status":"completed","output_text":"ok"}`, callCount)))
+			default:
+				writer.WriteHeader(http.StatusUnauthorized)
+				_, _ = writer.Write([]byte(`{"error":{"message":"manual override","type":"invalid_request_error","code":"invalid_api_key"}}`))
+			}
 		default:
-			writer.WriteHeader(http.StatusUnauthorized)
-			_, _ = writer.Write([]byte(`{"error":{"message":"manual override","type":"invalid_request_error","code":"invalid_api_key"}}`))
+			writer.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer server.Close()
@@ -767,12 +809,15 @@ base_url = "%s/v1"
 
 func TestAPILatencyHistoryPersistsAcrossServiceRestart(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v1/responses" {
+		switch request.URL.Path {
+		case "/":
+			writer.WriteHeader(http.StatusNoContent)
+		case "/v1/responses":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"id":"resp_persist","status":"completed","output_text":"ok"}`))
+		default:
 			writer.WriteHeader(http.StatusNotFound)
-			return
 		}
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"id":"resp_persist","status":"completed","output_text":"ok"}`))
 	}))
 	defer server.Close()
 
@@ -817,6 +862,72 @@ base_url = "%s/v1"
 	}
 	if !refreshed.LatencyTest.History[0].Available {
 		t.Fatalf("expected persisted history entry to remain available, got %+v", refreshed.LatencyTest.History[0])
+	}
+}
+
+func TestRefreshAPILatencyTestsRequestFailureKeepsHomepageLatency(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/":
+			writer.WriteHeader(http.StatusNoContent)
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := server.Client()
+	baseTransport := client.Transport
+	client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/v1/responses" {
+			return nil, errors.New("session request failed")
+		}
+		return baseTransport.RoundTrip(request)
+	})
+
+	service := newTestServiceWithHTTP(t, client)
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshAPILatencyTests returned error: %v", err)
+	}
+
+	refreshed := findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if refreshed.ID == "" {
+		t.Fatal("expected refreshed api profile in state")
+	}
+	if refreshed.LatencyTest.Status != LatencyTestStatusError {
+		t.Fatalf("expected error latency status, got %+v", refreshed.LatencyTest)
+	}
+	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
+		t.Fatalf("expected homepage latency ms to survive request failure, got %+v", refreshed.LatencyTest)
+	}
+	if !strings.Contains(refreshed.LatencyTest.ErrorMessage, "session request failed") {
+		t.Fatalf("expected session request failure to be preserved, got %+v", refreshed.LatencyTest)
+	}
+	if len(refreshed.LatencyTest.History) != 1 {
+		t.Fatalf("expected error result to be recorded into history, got %+v", refreshed.LatencyTest.History)
+	}
+	if refreshed.LatencyTest.History[0].LatencyMs == nil || *refreshed.LatencyTest.History[0].LatencyMs <= 0 {
+		t.Fatalf("expected history entry to keep homepage latency, got %+v", refreshed.LatencyTest.History[0])
 	}
 }
 
@@ -911,6 +1022,12 @@ func newTestServiceWithConfigDirAndHTTP(t *testing.T, appConfigDir string, clien
 		_ = service.Close()
 	})
 	return service
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 func findProfileByID(profiles []ProfileMeta, id string) ProfileMeta {

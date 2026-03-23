@@ -24,6 +24,18 @@ type apiProbeFailureInfo struct {
 	Code    string
 }
 
+type apiProbeRequestContext struct {
+	APIKey  string
+	BaseURL string
+	WireAPI string
+	Model   string
+}
+
+type officialProbeRequestContext struct {
+	AccessToken string
+	BaseURL     string
+}
+
 const latencyTestPrompt = "hi"
 const maxLatencyHistoryEntries = 48
 
@@ -37,7 +49,7 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 		}
 	}
 
-	req, err := buildLatencyTestRequest(profile)
+	req, err := buildLatencyAvailabilityRequest(profile)
 	if err != nil {
 		return profile, err
 	}
@@ -47,20 +59,41 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 
 	s.logLatencyTestRequest(profile, req)
 
+	latencyMs, err := s.measureProfileLatency(profile)
+	if err != nil {
+		s.logger.Debug(
+			"latency probe failed",
+			"profile_id", profile.Meta.ID,
+			"profile_type", profile.Meta.Type,
+			"error", err,
+		)
+	}
+
 	startedAt := time.Now()
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		profile.Meta.LatencyTest = LatencyTestState{
+			LatencyMs: latencyMs,
+		}
 		return profile, err
 	}
 	defer resp.Body.Close()
 
 	responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-	latencyMs := time.Since(startedAt).Milliseconds()
-	if latencyMs <= 0 {
-		latencyMs = 1
+	availabilityLatencyMs := time.Since(startedAt).Milliseconds()
+	if availabilityLatencyMs <= 0 {
+		availabilityLatencyMs = 1
 	}
 	if readErr != nil {
+		profile.Meta.LatencyTest = LatencyTestState{
+			LatencyMs:  latencyMs,
+			StatusCode: optionalInt(resp.StatusCode),
+		}
 		return profile, readErr
+	}
+
+	if latencyMs == nil && profile.Meta.Type != ProfileTypeAPI {
+		latencyMs = optionalInt64(availabilityLatencyMs)
 	}
 
 	available := resp.StatusCode >= 200 && resp.StatusCode < 300
@@ -69,7 +102,7 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 	profile.Meta.LatencyTest = LatencyTestState{
 		Status:     LatencyTestStatusSuccess,
 		Available:  available,
-		LatencyMs:  optionalInt64(latencyMs),
+		LatencyMs:  latencyMs,
 		StatusCode: optionalInt(resp.StatusCode),
 		CheckedAt:  s.now().UTC().Format(time.RFC3339),
 	}
@@ -81,44 +114,69 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 		profile.Meta.LatencyTest.ErrorCode = failureInfo.Code
 	}
 
-	s.logLatencyTestResult(profile, req, resp, latencyMs, failureInfo)
+	s.logLatencyTestResult(profile, req, resp, profile.Meta.LatencyTest.LatencyMs, failureInfo)
 	profile.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	return profile, nil
 }
 
-func buildLatencyTestRequest(profile storedProfile) (*http.Request, error) {
+func (s *Service) measureProfileLatency(profile storedProfile) (*int64, error) {
+	if profile.Meta.Type != ProfileTypeAPI {
+		return nil, nil
+	}
+
+	req, err := buildLatencyProbeRequest(profile)
+	if err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, nil
+	}
+
+	startedAt := time.Now()
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	latencyMs := time.Since(startedAt).Milliseconds()
+	if latencyMs <= 0 {
+		latencyMs = 1
+	}
+	return optionalInt64(latencyMs), nil
+}
+
+func buildLatencyAvailabilityRequest(profile storedProfile) (*http.Request, error) {
 	switch profile.Meta.Type {
 	case ProfileTypeAPI:
-		return buildAPILatencyTestRequest(profile)
+		return buildAPILatencyAvailabilityRequest(profile)
 	case ProfileTypeOfficial:
-		req, err := buildOfficialLatencyTestRequest(profile)
+		req, err := buildOfficialLatencyAvailabilityRequest(profile)
 		return req, err
 	default:
 		return nil, nil
 	}
 }
 
-func buildAPILatencyTestRequest(profile storedProfile) (*http.Request, error) {
-	var auth authFile
-	if err := json.Unmarshal([]byte(profile.AuthRaw), &auth); err != nil {
-		return nil, fmt.Errorf("读取延迟测试前解析 auth.json 失败: %w", err)
+func buildLatencyProbeRequest(profile storedProfile) (*http.Request, error) {
+	switch profile.Meta.Type {
+	case ProfileTypeAPI:
+		return buildAPILatencyProbeRequest(profile)
+	default:
+		return nil, nil
 	}
+}
 
-	apiKey := ""
-	if auth.OpenAIAPIKey != nil {
-		apiKey = strings.TrimSpace(*auth.OpenAIAPIKey)
+func buildAPILatencyAvailabilityRequest(profile storedProfile) (*http.Request, error) {
+	ctx, err := loadAPIProbeRequestContext(profile)
+	if err != nil {
+		return nil, err
 	}
-	if apiKey == "" {
-		return nil, fmt.Errorf("当前 API 配置缺少可用 OPENAI_API_KEY")
-	}
-
-	config := parseConfigTOML(profile.ConfigRaw)
-	model := strings.TrimSpace(trimmedFirst(config.Model, profile.Meta.Model))
-	if model == "" {
+	if strings.TrimSpace(ctx.Model) == "" {
 		return nil, fmt.Errorf("当前 API 配置缺少可用 model")
 	}
 
-	probeURL, requestBody, err := buildAPIInteractionProbe(config.BaseURL, config.WireAPI, model)
+	probeURL, requestBody, err := buildAPIInteractionProbe(ctx.BaseURL, ctx.WireAPI, ctx.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -127,36 +185,89 @@ func buildAPILatencyTestRequest(profile storedProfile) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+ctx.APIKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "CodexSwitch/0.1")
 	return req, nil
 }
 
-func buildOfficialLatencyTestRequest(profile storedProfile) (*http.Request, error) {
-	var auth authFile
-	if err := json.Unmarshal([]byte(profile.AuthRaw), &auth); err != nil {
-		return nil, fmt.Errorf("读取延迟测试前解析 auth.json 失败: %w", err)
-	}
-	if auth.Tokens == nil || strings.TrimSpace(auth.Tokens.AccessToken) == "" {
-		return nil, fmt.Errorf("当前官方配置缺少可用 access_token")
+func buildAPILatencyProbeRequest(profile storedProfile) (*http.Request, error) {
+	ctx, err := loadAPIProbeRequestContext(profile)
+	if err != nil {
+		return nil, err
 	}
 
-	config := parseConfigTOML(profile.ConfigRaw)
-	probeURL := officialUsageURL(config.BaseURL)
+	probeURL, err := apiLatencyProbeURL(ctx.BaseURL)
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequest(http.MethodGet, probeURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+auth.Tokens.AccessToken)
+	req.Header.Set("User-Agent", "CodexSwitch/0.1")
+	return req, nil
+}
+
+func buildOfficialLatencyAvailabilityRequest(profile storedProfile) (*http.Request, error) {
+	ctx, err := loadOfficialProbeRequestContext(profile)
+	if err != nil {
+		return nil, err
+	}
+
+	probeURL, err := officialLatencyModelsURL(ctx.BaseURL)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodGet, probeURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+ctx.AccessToken)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "CodexSwitch/0.1")
-	if accountID := trimmedFirst(auth.Tokens.AccountID, profile.Meta.ChatGPTAccountID); accountID != "" {
-		req.Header.Set("ChatGPT-Account-Id", accountID)
-	}
 	return req, nil
+}
+
+func loadAPIProbeRequestContext(profile storedProfile) (apiProbeRequestContext, error) {
+	var auth authFile
+	if err := json.Unmarshal([]byte(profile.AuthRaw), &auth); err != nil {
+		return apiProbeRequestContext{}, fmt.Errorf("读取延迟测试前解析 auth.json 失败: %w", err)
+	}
+
+	apiKey := ""
+	if auth.OpenAIAPIKey != nil {
+		apiKey = strings.TrimSpace(*auth.OpenAIAPIKey)
+	}
+	if apiKey == "" {
+		return apiProbeRequestContext{}, fmt.Errorf("当前 API 配置缺少可用 OPENAI_API_KEY")
+	}
+
+	config := parseConfigTOML(profile.ConfigRaw)
+	return apiProbeRequestContext{
+		APIKey:  apiKey,
+		BaseURL: config.BaseURL,
+		WireAPI: config.WireAPI,
+		Model:   strings.TrimSpace(trimmedFirst(config.Model, profile.Meta.Model)),
+	}, nil
+}
+
+func loadOfficialProbeRequestContext(profile storedProfile) (officialProbeRequestContext, error) {
+	var auth authFile
+	if err := json.Unmarshal([]byte(profile.AuthRaw), &auth); err != nil {
+		return officialProbeRequestContext{}, fmt.Errorf("读取延迟测试前解析 auth.json 失败: %w", err)
+	}
+	if auth.Tokens == nil || strings.TrimSpace(auth.Tokens.AccessToken) == "" {
+		return officialProbeRequestContext{}, fmt.Errorf("当前官方配置缺少可用 access_token")
+	}
+
+	config := parseConfigTOML(profile.ConfigRaw)
+	return officialProbeRequestContext{
+		AccessToken: strings.TrimSpace(auth.Tokens.AccessToken),
+		BaseURL:     config.BaseURL,
+	}, nil
 }
 
 func buildAPIInteractionProbe(baseURL, wireAPI, model string) (string, string, error) {
@@ -226,6 +337,74 @@ func apiEndpointURL(baseURL, endpointPath string) (string, error) {
 	return parsed.String(), nil
 }
 
+func apiLatencyProbeURL(baseURL string) (string, error) {
+	trimmed := strings.TrimSpace(baseURL)
+	if trimmed == "" {
+		return "", fmt.Errorf("Base URL 不能为空")
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("Base URL 无法解析: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("Base URL 格式无效")
+	}
+
+	path := strings.TrimRight(parsed.Path, "/")
+	lowerPath := strings.ToLower(path)
+	if lowerPath == "/v1" {
+		path = ""
+	} else if strings.HasSuffix(lowerPath, "/v1") {
+		path = path[:len(path)-len("/v1")]
+	}
+
+	if path == "" {
+		parsed.Path = "/"
+	} else {
+		parsed.Path = path
+	}
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func officialLatencyModelsURL(baseURL string) (string, error) {
+	trimmed := strings.TrimSpace(baseURL)
+	if trimmed == "" {
+		return "https://api.openai.com/v1/models", nil
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("Base URL 无法解析: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("Base URL 格式无效")
+	}
+
+	path := strings.TrimRight(parsed.Path, "/")
+	lowerPath := strings.ToLower(path)
+	if strings.HasSuffix(lowerPath, "/backend-api") {
+		path = path[:len(path)-len("/backend-api")]
+		lowerPath = strings.ToLower(path)
+	}
+	if path == "" {
+		path = "/v1"
+		lowerPath = "/v1"
+	}
+	if !strings.HasSuffix(lowerPath, "/v1") {
+		path += "/v1"
+	}
+
+	parsed.Path = path + "/models"
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
 func extractAPIProbeFailure(statusCode int, status string, body []byte) apiProbeFailureInfo {
 	if statusCode <= 0 && strings.TrimSpace(status) == "" {
 		return apiProbeFailureInfo{Message: "延迟测试失败"}
@@ -285,7 +464,7 @@ func (s *Service) logLatencyTestResult(
 	profile storedProfile,
 	req *http.Request,
 	resp *http.Response,
-	latencyMs int64,
+	latencyMs *int64,
 	failureInfo apiProbeFailureInfo,
 ) {
 	if req == nil || resp == nil {
@@ -299,8 +478,10 @@ func (s *Service) logLatencyTestResult(
 		"method", req.Method,
 		"target", latencyTestLogTarget(req),
 		"status_code", resp.StatusCode,
-		"latency_ms", latencyMs,
 		"available", available,
+	}
+	if latencyMs != nil {
+		logArgs = append(logArgs, "latency_ms", *latencyMs)
 	}
 
 	if !available {

@@ -331,11 +331,17 @@ func (s *Service) refreshAPILatencyTests(ids []string, writeMode latencyHistoryW
 		updated, err := s.refreshProfileLatencyTest(stored)
 		if err != nil {
 			s.logger.Warn("refresh latency tests failed", "id", meta.ID, "error", err)
+			checkedAt := strings.TrimSpace(updated.Meta.LatencyTest.CheckedAt)
+			if checkedAt == "" {
+				checkedAt = s.now().UTC().Format(time.RFC3339)
+			}
 			updated.Meta.LatencyTest = LatencyTestState{
 				Status:       LatencyTestStatusError,
 				Available:    false,
+				LatencyMs:    copyOptionalInt64(updated.Meta.LatencyTest.LatencyMs),
+				StatusCode:   copyOptionalInt(updated.Meta.LatencyTest.StatusCode),
 				ErrorMessage: err.Error(),
-				CheckedAt:    s.now().UTC().Format(time.RFC3339),
+				CheckedAt:    checkedAt,
 			}
 			updated.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		}

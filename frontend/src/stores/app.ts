@@ -14,6 +14,7 @@ import type {
 
 type ApiDialogMode = 'create' | 'edit';
 type ConfirmAction = 'switch' | 'delete';
+type LatencyRefreshMode = 'manual' | 'auto';
 
 const emptyAppState: AppState = {
   settings: {
@@ -402,49 +403,31 @@ export const useAppStore = defineStore('app', {
     },
 
     async testProfileLatency(profile: ProfileMeta, showSuccess = true) {
-      if (profile.type !== 'api' && profile.type !== 'official') {
-        return;
-      }
-      if (this.testingLatencyProfileIds.includes(profile.id)) {
-        return;
-      }
-
-      this.testingLatencyProfileIds = [...this.testingLatencyProfileIds, profile.id];
-      try {
-        this.appState = await backend.refreshApiLatencyTests([profile.id]);
-        if (showSuccess) {
-          this.notify(
-            translate('notifications.latencyTested', {
-              name: profile.displayName || translate('common.account'),
-            }),
-          );
-        }
-      } catch (error) {
-        this.notify(this.formatError(error), 'error');
-      } finally {
-        this.testingLatencyProfileIds = this.testingLatencyProfileIds.filter((id) => id !== profile.id);
-      }
+      await this.runProfileLatencyRefresh(profile, {
+        mode: 'manual',
+        showSuccess,
+      });
     },
 
     async refreshApiProfileAvailability(showSuccess = false) {
-      const targetIds = this.appState.profiles
-        .filter((profile) => profile.type === 'api' && !this.testingLatencyProfileIds.includes(profile.id))
-        .map((profile) => profile.id);
+      const targets = this.appState.profiles.filter(
+        (profile) => profile.type === 'api' && !this.testingLatencyProfileIds.includes(profile.id),
+      );
 
-      if (targetIds.length === 0) {
+      if (targets.length === 0) {
         return;
       }
 
-      this.testingLatencyProfileIds = [...new Set([...this.testingLatencyProfileIds, ...targetIds])];
-      try {
-        this.appState = await backend.autoRefreshApiLatencyTests(targetIds);
-        if (showSuccess) {
-          this.notify(translate('notifications.apiAvailabilityRefreshed'));
-        }
-      } catch (error) {
-        this.notify(this.formatError(error), 'error');
-      } finally {
-        this.testingLatencyProfileIds = this.testingLatencyProfileIds.filter((id) => !targetIds.includes(id));
+      await Promise.allSettled(
+        targets.map((profile) =>
+          this.runProfileLatencyRefresh(profile, {
+            mode: 'auto',
+            showSuccess: false,
+          }),
+        ),
+      );
+      if (showSuccess) {
+        this.notify(translate('notifications.apiAvailabilityRefreshed'));
       }
     },
 
@@ -461,12 +444,54 @@ export const useAppStore = defineStore('app', {
 
       this.testingAllLatency = true;
       try {
-        await Promise.allSettled(targets.map((profile) => this.testProfileLatency(profile, false)));
+        await Promise.allSettled(
+          targets.map((profile) =>
+            this.runProfileLatencyRefresh(profile, {
+              mode: 'manual',
+              showSuccess: false,
+            }),
+          ),
+        );
         if (showSuccess) {
           this.notify(translate('notifications.allLatencyTested'));
         }
       } finally {
         this.testingAllLatency = false;
+      }
+    },
+
+    async runProfileLatencyRefresh(
+      profile: ProfileMeta,
+      options: {
+        mode: LatencyRefreshMode;
+        showSuccess?: boolean;
+      },
+    ) {
+      if (profile.type !== 'api' && profile.type !== 'official') {
+        return;
+      }
+      if (this.testingLatencyProfileIds.includes(profile.id)) {
+        return;
+      }
+
+      const { mode, showSuccess = false } = options;
+      this.testingLatencyProfileIds = [...this.testingLatencyProfileIds, profile.id];
+      try {
+        this.appState =
+          mode === 'auto'
+            ? await backend.autoRefreshApiLatencyTests([profile.id])
+            : await backend.refreshApiLatencyTests([profile.id]);
+        if (showSuccess) {
+          this.notify(
+            translate('notifications.latencyTested', {
+              name: profile.displayName || translate('common.account'),
+            }),
+          );
+        }
+      } catch (error) {
+        this.notify(this.formatError(error), 'error');
+      } finally {
+        this.testingLatencyProfileIds = this.testingLatencyProfileIds.filter((id) => id !== profile.id);
       }
     },
 
