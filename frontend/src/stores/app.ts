@@ -71,6 +71,18 @@ function getProfileLatencyMs(profile: ProfileMeta) {
   return latencyMs;
 }
 
+function getProfileLatencySortBucket(profile: ProfileMeta) {
+  if (profile.type !== 'official' && profile.type !== 'api') {
+    return 3;
+  }
+
+  if (profile.latencyTest.status !== 'success') {
+    return 2;
+  }
+
+  return profile.latencyTest.available ? 0 : 1;
+}
+
 function getProfileUpdatedAtTimestamp(profile: ProfileMeta) {
   const timestamp = new Date(profile.updatedAt).getTime();
   return Number.isNaN(timestamp) ? null : timestamp;
@@ -110,6 +122,14 @@ function sortProfilesForDisplay(profiles: ProfileMeta[], sortState: ProfileSortS
   return profiles
     .map((profile, index) => ({ profile, index }))
     .sort((left, right) => {
+      if (sortState.key === 'latency') {
+        const leftLatencyBucket = getProfileLatencySortBucket(left.profile);
+        const rightLatencyBucket = getProfileLatencySortBucket(right.profile);
+        if (leftLatencyBucket !== rightLatencyBucket) {
+          return leftLatencyBucket - rightLatencyBucket;
+        }
+      }
+
       const leftValue = getProfileSortValue(left.profile, sortState.key);
       const rightValue = getProfileSortValue(right.profile, sortState.key);
       const comparison = compareNullableNumbers(leftValue, rightValue, sortState.direction);
@@ -417,7 +437,7 @@ export const useAppStore = defineStore('app', {
 
       this.testingLatencyProfileIds = [...new Set([...this.testingLatencyProfileIds, ...targetIds])];
       try {
-        this.appState = await backend.refreshApiLatencyTests(targetIds);
+        this.appState = await backend.autoRefreshApiLatencyTests(targetIds);
         if (showSuccess) {
           this.notify(translate('notifications.apiAvailabilityRefreshed'));
         }

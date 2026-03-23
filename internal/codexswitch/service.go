@@ -1,6 +1,7 @@
 package codexswitch
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,10 +21,11 @@ type ServiceOptions struct {
 }
 
 type Service struct {
-	appConfigDir string
-	httpClient   *http.Client
-	logger       *slog.Logger
-	now          func() time.Time
+	appConfigDir     string
+	httpClient       *http.Client
+	latencyHistoryDB *sql.DB
+	logger           *slog.Logger
+	now              func() time.Time
 }
 
 func NewService(options ServiceOptions) (*Service, error) {
@@ -47,12 +49,28 @@ func NewService(options ServiceOptions) (*Service, error) {
 		now = time.Now
 	}
 
+	if err := ensureDir(appConfigDir); err != nil {
+		return nil, fmt.Errorf("初始化应用配置目录失败: %w", err)
+	}
+	latencyDB, err := openLatencyHistoryDB(appConfigDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Service{
-		appConfigDir: appConfigDir,
-		httpClient:   httpClient,
-		logger:       logger,
-		now:          now,
+		appConfigDir:     appConfigDir,
+		httpClient:       httpClient,
+		latencyHistoryDB: latencyDB,
+		logger:           logger,
+		now:              now,
 	}, nil
+}
+
+func (s *Service) Close() error {
+	if s == nil || s.latencyHistoryDB == nil {
+		return nil
+	}
+	return s.latencyHistoryDB.Close()
 }
 
 func (s *Service) GetAppState() (AppState, error) {
@@ -272,6 +290,14 @@ func (s *Service) RefreshRateLimits(ids []string) (AppState, error) {
 }
 
 func (s *Service) RefreshAPILatencyTests(ids []string) (AppState, error) {
+	return s.refreshAPILatencyTests(ids, latencyHistoryWriteModeManual)
+}
+
+func (s *Service) AutoRefreshAPILatencyTests(ids []string) (AppState, error) {
+	return s.refreshAPILatencyTests(ids, latencyHistoryWriteModeAuto)
+}
+
+func (s *Service) refreshAPILatencyTests(ids []string, writeMode latencyHistoryWriteMode) (AppState, error) {
 	if err := s.ensureAppLayout(); err != nil {
 		return AppState{}, err
 	}
@@ -311,8 +337,12 @@ func (s *Service) RefreshAPILatencyTests(ids []string) (AppState, error) {
 				ErrorMessage: err.Error(),
 				CheckedAt:    s.now().UTC().Format(time.RFC3339),
 			}
-			appendLatencyTestHistory(&updated.Meta.LatencyTest)
 			updated.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+		}
+		if meta.Type == ProfileTypeAPI {
+			if err := s.recordAPILatencyHistory(meta.ID, updated.Meta.LatencyTest, writeMode); err != nil {
+				s.logger.Warn("record api latency history failed", "id", meta.ID, "error", err)
+			}
 		}
 
 		if err := s.saveProfileSnapshot(s.buildSnapshotFromExistingProfile(updated)); err != nil {

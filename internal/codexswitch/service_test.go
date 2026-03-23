@@ -677,6 +677,149 @@ base_url = "https://api.openai.com/v1"
 	}
 }
 
+func TestAutoRefreshAPILatencyTestsAppendRowsAndManualTestUpdatesLatestRow(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v1/responses" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		callCount++
+		writer.Header().Set("Content-Type", "application/json")
+		switch callCount {
+		case 1, 2:
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"id":"resp_%d","status":"completed","output_text":"ok"}`, callCount)))
+		default:
+			writer.WriteHeader(http.StatusUnauthorized)
+			_, _ = writer.Write([]byte(`{"error":{"message":"manual override","type":"invalid_request_error","code":"invalid_api_key"}}`))
+		}
+	}))
+	defer server.Close()
+
+	service := newTestServiceWithHTTP(t, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.AutoRefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("first AutoRefreshAPILatencyTests returned error: %v", err)
+	}
+	refreshed := findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if len(refreshed.LatencyTest.History) != 1 {
+		t.Fatalf("expected 1 history entry after first auto refresh, got %+v", refreshed.LatencyTest.History)
+	}
+
+	state, err = service.AutoRefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("second AutoRefreshAPILatencyTests returned error: %v", err)
+	}
+	refreshed = findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if len(refreshed.LatencyTest.History) != 2 {
+		t.Fatalf("expected 2 history entries after second auto refresh, got %+v", refreshed.LatencyTest.History)
+	}
+	if !refreshed.LatencyTest.History[0].Available || !refreshed.LatencyTest.History[1].Available {
+		t.Fatalf("expected both auto history entries to be available, got %+v", refreshed.LatencyTest.History)
+	}
+
+	state, err = service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("manual RefreshAPILatencyTests returned error: %v", err)
+	}
+	refreshed = findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if len(refreshed.LatencyTest.History) != 2 {
+		t.Fatalf("expected manual refresh to update latest row instead of inserting, got %+v", refreshed.LatencyTest.History)
+	}
+	if !refreshed.LatencyTest.History[0].Available {
+		t.Fatalf("expected first auto history entry to remain available, got %+v", refreshed.LatencyTest.History[0])
+	}
+	if refreshed.LatencyTest.History[1].Available {
+		t.Fatalf("expected latest history entry to be updated to unavailable, got %+v", refreshed.LatencyTest.History[1])
+	}
+	if refreshed.LatencyTest.History[1].ErrorMessage != "manual override" {
+		t.Fatalf("expected latest history entry to be updated by manual refresh, got %+v", refreshed.LatencyTest.History[1])
+	}
+
+	metaRaw, err := os.ReadFile(filepath.Join(service.profileDir(snapshot.Meta.ID), "meta.json"))
+	if err != nil {
+		t.Fatalf("read meta.json failed: %v", err)
+	}
+	if strings.Contains(string(metaRaw), "\"history\"") {
+		t.Fatalf("expected history to be stored in sqlite instead of meta.json, got %s", string(metaRaw))
+	}
+}
+
+func TestAPILatencyHistoryPersistsAcrossServiceRestart(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v1/responses" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"resp_persist","status":"completed","output_text":"ok"}`))
+	}))
+	defer server.Close()
+
+	appConfigDir := t.TempDir()
+	codexHome := t.TempDir()
+	service := newTestServiceWithConfigDirAndHTTP(t, appConfigDir, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: codexHome}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	if _, err := service.AutoRefreshAPILatencyTests([]string{snapshot.Meta.ID}); err != nil {
+		t.Fatalf("AutoRefreshAPILatencyTests returned error: %v", err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("service.Close returned error: %v", err)
+	}
+
+	restarted := newTestServiceWithConfigDirAndHTTP(t, appConfigDir, server.Client())
+	state, err := restarted.GetAppState()
+	if err != nil {
+		t.Fatalf("restarted GetAppState returned error: %v", err)
+	}
+
+	refreshed := findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if len(refreshed.LatencyTest.History) != 1 {
+		t.Fatalf("expected sqlite history to persist across restart, got %+v", refreshed.LatencyTest.History)
+	}
+	if !refreshed.LatencyTest.History[0].Available {
+		t.Fatalf("expected persisted history entry to remain available, got %+v", refreshed.LatencyTest.History[0])
+	}
+}
+
 func TestImportOfficialProfileFileRefreshesRateLimits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/backend-api/wham/usage" {
@@ -749,6 +892,11 @@ func newTestService(t *testing.T) *Service {
 func newTestServiceWithHTTP(t *testing.T, client *http.Client) *Service {
 	t.Helper()
 	appConfigDir := t.TempDir()
+	return newTestServiceWithConfigDirAndHTTP(t, appConfigDir, client)
+}
+
+func newTestServiceWithConfigDirAndHTTP(t *testing.T, appConfigDir string, client *http.Client) *Service {
+	t.Helper()
 	service, err := NewService(ServiceOptions{
 		AppConfigDir: appConfigDir,
 		HTTPClient:   client,
@@ -759,7 +907,19 @@ func newTestServiceWithHTTP(t *testing.T, client *http.Client) *Service {
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = service.Close()
+	})
 	return service
+}
+
+func findProfileByID(profiles []ProfileMeta, id string) ProfileMeta {
+	for _, profile := range profiles {
+		if profile.ID == id {
+			return profile
+		}
+	}
+	return ProfileMeta{}
 }
 
 func prepareCodexHome(t *testing.T, sampleDir string) string {

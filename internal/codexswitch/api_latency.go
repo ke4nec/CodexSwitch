@@ -1,7 +1,6 @@
 package codexswitch
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,7 +37,7 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 		}
 	}
 
-	req, requestBody, err := buildLatencyTestRequest(profile)
+	req, err := buildLatencyTestRequest(profile)
 	if err != nil {
 		return profile, err
 	}
@@ -46,7 +45,7 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 		return profile, nil
 	}
 
-	s.logLatencyTestRequest(profile, req, requestBody)
+	s.logLatencyTestRequest(profile, req)
 
 	startedAt := time.Now()
 	resp, err := s.httpClient.Do(req)
@@ -64,44 +63,45 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 		return profile, readErr
 	}
 
-	s.logLatencyTestResponse(profile, req, resp, latencyMs, responseBody)
+	available := resp.StatusCode >= 200 && resp.StatusCode < 300
+	var failureInfo apiProbeFailureInfo
 
 	profile.Meta.LatencyTest = LatencyTestState{
 		Status:     LatencyTestStatusSuccess,
-		Available:  resp.StatusCode >= 200 && resp.StatusCode < 300,
+		Available:  available,
 		LatencyMs:  optionalInt64(latencyMs),
 		StatusCode: optionalInt(resp.StatusCode),
 		CheckedAt:  s.now().UTC().Format(time.RFC3339),
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		failureInfo := extractAPIProbeFailure(resp.StatusCode, resp.Status, responseBody)
+	if !available {
+		failureInfo = extractAPIProbeFailure(resp.StatusCode, resp.Status, responseBody)
 		profile.Meta.LatencyTest.ErrorMessage = failureInfo.Message
 		profile.Meta.LatencyTest.ErrorType = failureInfo.Type
 		profile.Meta.LatencyTest.ErrorCode = failureInfo.Code
 	}
-	appendLatencyTestHistory(&profile.Meta.LatencyTest)
 
+	s.logLatencyTestResult(profile, req, resp, latencyMs, failureInfo)
 	profile.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	return profile, nil
 }
 
-func buildLatencyTestRequest(profile storedProfile) (*http.Request, string, error) {
+func buildLatencyTestRequest(profile storedProfile) (*http.Request, error) {
 	switch profile.Meta.Type {
 	case ProfileTypeAPI:
 		return buildAPILatencyTestRequest(profile)
 	case ProfileTypeOfficial:
 		req, err := buildOfficialLatencyTestRequest(profile)
-		return req, "", err
+		return req, err
 	default:
-		return nil, "", nil
+		return nil, nil
 	}
 }
 
-func buildAPILatencyTestRequest(profile storedProfile) (*http.Request, string, error) {
+func buildAPILatencyTestRequest(profile storedProfile) (*http.Request, error) {
 	var auth authFile
 	if err := json.Unmarshal([]byte(profile.AuthRaw), &auth); err != nil {
-		return nil, "", fmt.Errorf("读取延迟测试前解析 auth.json 失败: %w", err)
+		return nil, fmt.Errorf("读取延迟测试前解析 auth.json 失败: %w", err)
 	}
 
 	apiKey := ""
@@ -109,29 +109,29 @@ func buildAPILatencyTestRequest(profile storedProfile) (*http.Request, string, e
 		apiKey = strings.TrimSpace(*auth.OpenAIAPIKey)
 	}
 	if apiKey == "" {
-		return nil, "", fmt.Errorf("当前 API 配置缺少可用 OPENAI_API_KEY")
+		return nil, fmt.Errorf("当前 API 配置缺少可用 OPENAI_API_KEY")
 	}
 
 	config := parseConfigTOML(profile.ConfigRaw)
 	model := strings.TrimSpace(trimmedFirst(config.Model, profile.Meta.Model))
 	if model == "" {
-		return nil, "", fmt.Errorf("当前 API 配置缺少可用 model")
+		return nil, fmt.Errorf("当前 API 配置缺少可用 model")
 	}
 
 	probeURL, requestBody, err := buildAPIInteractionProbe(config.BaseURL, config.WireAPI, model)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodPost, probeURL, strings.NewReader(requestBody))
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "CodexSwitch/0.1")
-	return req, requestBody, nil
+	return req, nil
 }
 
 func buildOfficialLatencyTestRequest(profile storedProfile) (*http.Request, error) {
@@ -260,93 +260,81 @@ func optionalInt(value int) *int {
 	return &value
 }
 
-func (s *Service) logLatencyTestRequest(profile storedProfile, req *http.Request, requestBody string) {
+func (s *Service) logLatencyTestRequest(profile storedProfile, req *http.Request) {
 	if req == nil {
 		return
 	}
 
-	s.logger.Info(
-		"latency test request",
+	logArgs := []any{
 		"profile_id", profile.Meta.ID,
 		"profile_type", profile.Meta.Type,
-		"model", strings.TrimSpace(profile.Meta.Model),
 		"method", req.Method,
-		"url", req.URL.String(),
-		"authorization", maskAuthorizationHeader(req.Header.Get("Authorization")),
-		"request_body", formatProbeLogBody([]byte(requestBody)),
+		"target", latencyTestLogTarget(req),
+	}
+	if model := strings.TrimSpace(profile.Meta.Model); model != "" {
+		logArgs = append(logArgs, "model", model)
+	}
+
+	s.logger.Debug(
+		"latency test start",
+		logArgs...,
 	)
 }
 
-func (s *Service) logLatencyTestResponse(
+func (s *Service) logLatencyTestResult(
 	profile storedProfile,
 	req *http.Request,
 	resp *http.Response,
 	latencyMs int64,
-	responseBody []byte,
+	failureInfo apiProbeFailureInfo,
 ) {
 	if req == nil || resp == nil {
 		return
 	}
 
-	s.logger.Info(
-		"latency test response",
+	available := resp.StatusCode >= 200 && resp.StatusCode < 300
+	logArgs := []any{
 		"profile_id", profile.Meta.ID,
 		"profile_type", profile.Meta.Type,
 		"method", req.Method,
-		"url", req.URL.String(),
+		"target", latencyTestLogTarget(req),
 		"status_code", resp.StatusCode,
 		"latency_ms", latencyMs,
-		"response_body", formatProbeLogBody(responseBody),
+		"available", available,
+	}
+
+	if !available {
+		if failureInfo.Type != "" {
+			logArgs = append(logArgs, "error_type", failureInfo.Type)
+		}
+		if failureInfo.Code != "" {
+			logArgs = append(logArgs, "error_code", failureInfo.Code)
+		}
+		if failureInfo.Message != "" {
+			logArgs = append(logArgs, "error_message", failureInfo.Message)
+		}
+	}
+
+	s.logger.Info(
+		"latency test completed",
+		logArgs...,
 	)
 }
 
-func maskAuthorizationHeader(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return ""
-	}
-	if strings.HasPrefix(strings.ToLower(trimmed), "bearer ") {
-		return "Bearer " + maskAPIKey(strings.TrimSpace(trimmed[len("bearer "):]))
-	}
-	return maskAPIKey(trimmed)
-}
-
-func formatProbeLogBody(body []byte) string {
-	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) == 0 {
+func latencyTestLogTarget(req *http.Request) string {
+	if req == nil || req.URL == nil {
 		return ""
 	}
 
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, trimmed); err == nil {
-		trimmed = compact.Bytes()
+	target := strings.TrimSpace(req.URL.Host)
+	path := strings.TrimSpace(req.URL.EscapedPath())
+	if path == "" {
+		path = "/"
 	}
-
-	const maxLogBodyLength = 4096
-	if len(trimmed) > maxLogBodyLength {
-		return string(trimmed[:maxLogBodyLength]) + "...(truncated)"
+	if target == "" {
+		return path
 	}
-	return string(trimmed)
-}
-
-func appendLatencyTestHistory(state *LatencyTestState) {
-	if state == nil || strings.TrimSpace(state.CheckedAt) == "" {
-		return
-	}
-
-	entry := LatencyHistoryEntry{
-		Status:       state.Status,
-		Available:    state.Available,
-		LatencyMs:    copyOptionalInt64(state.LatencyMs),
-		StatusCode:   copyOptionalInt(state.StatusCode),
-		ErrorMessage: strings.TrimSpace(state.ErrorMessage),
-		ErrorType:    strings.TrimSpace(state.ErrorType),
-		ErrorCode:    strings.TrimSpace(state.ErrorCode),
-		CheckedAt:    strings.TrimSpace(state.CheckedAt),
-	}
-
-	history := append(trimLatencyHistoryEntries(state.History), entry)
-	state.History = trimLatencyHistoryEntries(history)
+	return target + path
 }
 
 func trimLatencyHistoryEntries(history []LatencyHistoryEntry) []LatencyHistoryEntry {

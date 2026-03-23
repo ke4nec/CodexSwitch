@@ -39,7 +39,11 @@ func (a *App) startup(ctx context.Context) {
 	a.mu.Unlock()
 }
 
-func (a *App) shutdown(context.Context) {}
+func (a *App) shutdown(context.Context) {
+	if a.service != nil {
+		_ = a.service.Close()
+	}
+}
 
 func (a *App) GetAppState() (codexswitch.AppState, error) {
 	return withAppLock(&a.mu, a.service.GetAppState)
@@ -118,6 +122,12 @@ func (a *App) RefreshRateLimits(ids []string) (codexswitch.AppState, error) {
 func (a *App) RefreshApiLatencyTests(ids []string) (codexswitch.AppState, error) {
 	return withAppLock(&a.mu, func() (codexswitch.AppState, error) {
 		return a.service.RefreshAPILatencyTests(ids)
+	})
+}
+
+func (a *App) AutoRefreshApiLatencyTests(ids []string) (codexswitch.AppState, error) {
+	return withAppLock(&a.mu, func() (codexswitch.AppState, error) {
+		return a.service.AutoRefreshAPILatencyTests(ids)
 	})
 }
 

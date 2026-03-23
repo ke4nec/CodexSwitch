@@ -740,10 +740,11 @@ body {
 
 .connectivity-history {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-start;
-  gap: 1px;
+  gap: 2px;
   width: 100%;
+  overflow: hidden;
 }
 
 .connectivity-dot {

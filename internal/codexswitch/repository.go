@@ -64,6 +64,18 @@ func (s *Service) loadProfile(id string) (storedProfile, error) {
 	}
 
 	normalizeStoredProfileMeta(&profile)
+	if profile.Meta.Type == ProfileTypeAPI {
+		if err := s.seedAPILatencyHistoryIfEmpty(profile.Meta.ID, profile.Meta.LatencyTest.History); err != nil {
+			s.logger.Warn("seed api latency history failed", "id", profile.Meta.ID, "error", err)
+		}
+		history, err := s.loadAPILatencyHistory(profile.Meta.ID, maxLatencyHistoryEntries)
+		if err != nil {
+			s.logger.Warn("load api latency history failed", "id", profile.Meta.ID, "error", err)
+			profile.Meta.LatencyTest.History = nil
+		} else {
+			profile.Meta.LatencyTest.History = history
+		}
+	}
 	return profile, nil
 }
 
@@ -128,7 +140,14 @@ func (s *Service) saveProfileSnapshot(snapshot *profileSnapshot) error {
 	} else if err := safeWriteText(filepath.Join(dir, "config.toml"), snapshot.ConfigRaw); err != nil {
 		return fmt.Errorf("写入 config.toml 失败: %w", err)
 	}
-	if err := safeWriteJSON(filepath.Join(dir, "meta.json"), snapshot.Meta); err != nil {
+	if snapshot.Meta.Type == ProfileTypeAPI {
+		if err := s.seedAPILatencyHistoryIfEmpty(snapshot.Meta.ID, snapshot.Meta.LatencyTest.History); err != nil {
+			s.logger.Warn("seed api latency history before save failed", "id", snapshot.Meta.ID, "error", err)
+		}
+	}
+	metaForDisk := snapshot.Meta
+	metaForDisk.LatencyTest.History = nil
+	if err := safeWriteJSON(filepath.Join(dir, "meta.json"), metaForDisk); err != nil {
 		return fmt.Errorf("写入 meta.json 失败: %w", err)
 	}
 	return nil
@@ -137,6 +156,9 @@ func (s *Service) saveProfileSnapshot(snapshot *profileSnapshot) error {
 func (s *Service) deleteProfileDirectory(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return fmt.Errorf("配置 ID 不能为空")
+	}
+	if err := s.deleteAPILatencyHistory(id); err != nil {
+		return err
 	}
 	if err := os.RemoveAll(s.profileDir(id)); err != nil {
 		return fmt.Errorf("删除配置失败: %w", err)
