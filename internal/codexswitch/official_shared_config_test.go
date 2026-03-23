@@ -117,6 +117,7 @@ sandbox = "elevated"
 		BaseURL:              "https://example.com/v1",
 		Model:                "gpt-5.4",
 		ModelReasoningEffort: "xhigh",
+		ModelContextWindow:   "128000",
 		APIKey:               "sk-switch-shared-config",
 	})
 	if err != nil {

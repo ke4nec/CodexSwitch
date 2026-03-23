@@ -83,6 +83,7 @@ export interface APIProfileInput {
   baseURL: string;
   model: string;
   modelReasoningEffort: string;
+  modelContextWindow: string;
   apiKey: string;
 }
 

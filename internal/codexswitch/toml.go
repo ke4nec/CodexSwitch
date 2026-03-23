@@ -10,6 +10,7 @@ type parsedConfig struct {
 	Model                string
 	ReviewModel          string
 	ModelReasoningEffort string
+	ModelContextWindow   string
 	BaseURL              string
 	Values               map[string]string
 }
@@ -46,6 +47,8 @@ func parseConfigTOML(raw string) parsedConfig {
 			cfg.ReviewModel = parsedValue
 		case fullKey == "model_reasoning_effort":
 			cfg.ModelReasoningEffort = parsedValue
+		case fullKey == "model_context_window":
+			cfg.ModelContextWindow = parsedValue
 		case fullKey == "base_url" && cfg.BaseURL == "":
 			cfg.BaseURL = parsedValue
 		case strings.HasSuffix(fullKey, ".base_url") && cfg.BaseURL == "":

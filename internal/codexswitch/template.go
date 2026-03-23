@@ -3,9 +3,12 @@ package codexswitch
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const defaultAPIModelContextWindow = "1000000"
 
 const apiConfigTemplate = `model_provider = "OpenAI"
 model = {{ .Model }}
@@ -14,8 +17,8 @@ model_reasoning_effort = {{ .ModelReasoningEffort }}
 disable_response_storage = true
 network_access = "enabled"
 windows_wsl_setup_acknowledged = true
-model_context_window = 1000000
-model_auto_compact_token_limit = 900000
+model_context_window = {{ .ModelContextWindow }}
+model_auto_compact_token_limit = {{ .ModelAutoCompactTokenLimit }}
 
 [model_providers.OpenAI]
 name = "OpenAI"
@@ -49,6 +52,7 @@ func normalizeAPIProfileInput(input APIProfileInput) APIProfileInput {
 	input.BaseURL = strings.TrimRight(strings.TrimSpace(input.BaseURL), "/")
 	input.Model = strings.TrimSpace(input.Model)
 	input.ModelReasoningEffort = strings.TrimSpace(input.ModelReasoningEffort)
+	input.ModelContextWindow = normalizeModelContextWindow(input.ModelContextWindow)
 	input.APIKey = strings.TrimSpace(input.APIKey)
 	return input
 }
@@ -61,6 +65,10 @@ func validateAPIProfileInput(input APIProfileInput) error {
 		return fmt.Errorf("模型不能为空")
 	case input.ModelReasoningEffort == "":
 		return fmt.Errorf("推理强度不能为空")
+	case input.ModelContextWindow == "":
+		return fmt.Errorf("上下文大小不能为空")
+	case !isPositiveInteger(input.ModelContextWindow):
+		return fmt.Errorf("上下文大小必须是正整数")
 	case input.APIKey == "":
 		return fmt.Errorf("API Key 不能为空")
 	default:
@@ -69,12 +77,47 @@ func validateAPIProfileInput(input APIProfileInput) error {
 }
 
 func renderAPIConfig(input APIProfileInput) string {
+	contextWindow := input.ModelContextWindow
+	autoCompactTokenLimit := computeAutoCompactTokenLimit(contextWindow)
 	replacer := strings.NewReplacer(
 		"{{ .Model }}", tomlQuote(input.Model),
 		"{{ .ModelReasoningEffort }}", tomlQuote(input.ModelReasoningEffort),
+		"{{ .ModelContextWindow }}", contextWindow,
+		"{{ .ModelAutoCompactTokenLimit }}", autoCompactTokenLimit,
 		"{{ .BaseURL }}", tomlQuote(input.BaseURL),
 	)
 	return replacer.Replace(apiConfigTemplate)
+}
+
+func normalizeModelContextWindow(value string) string {
+	value = strings.ReplaceAll(strings.TrimSpace(value), "_", "")
+	if value == "" {
+		return defaultAPIModelContextWindow
+	}
+	return value
+}
+
+func defaultModelContextWindowOr(value string) string {
+	return normalizeModelContextWindow(value)
+}
+
+func isPositiveInteger(value string) bool {
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	return err == nil && parsed > 0
+}
+
+func computeAutoCompactTokenLimit(modelContextWindow string) string {
+	parsed, err := strconv.ParseInt(modelContextWindow, 10, 64)
+	if err != nil || parsed <= 0 {
+		parsed, _ = strconv.ParseInt(defaultAPIModelContextWindow, 10, 64)
+	}
+
+	limit := parsed * 9 / 10
+	if limit < 1 {
+		limit = 1
+	}
+
+	return strconv.FormatInt(limit, 10)
 }
 
 func (s *Service) buildSnapshotFromExistingProfile(profile storedProfile) *profileSnapshot {

@@ -167,6 +167,7 @@ func (s *Service) GetAPIProfileInput(id string) (APIProfileInput, error) {
 		BaseURL:              strings.TrimSpace(config.BaseURL),
 		Model:                strings.TrimSpace(config.Model),
 		ModelReasoningEffort: strings.TrimSpace(config.ModelReasoningEffort),
+		ModelContextWindow:   defaultModelContextWindowOr(config.ModelContextWindow),
 		APIKey:               apiKey,
 	}, nil
 }

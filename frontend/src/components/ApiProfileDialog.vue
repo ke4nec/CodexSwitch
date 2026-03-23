@@ -16,6 +16,14 @@
           :label="t('dialogs.apiProfile.reasoningEffort')"
           placeholder="xhigh"
         />
+        <v-text-field
+          v-model="localForm.modelContextWindow"
+          :label="t('dialogs.apiProfile.contextWindow')"
+          type="number"
+          min="1"
+          step="1"
+          placeholder="1000000"
+        />
         <v-textarea
           v-model="localForm.apiKey"
           :label="t('dialogs.apiProfile.apiKey')"
@@ -62,6 +70,7 @@ const localForm = reactive<APIProfileInput>({
   baseURL: '',
   model: '',
   modelReasoningEffort: '',
+  modelContextWindow: '',
   apiKey: '',
 });
 

@@ -136,6 +136,7 @@ func TestCreateAndSwitchAPIProfile(t *testing.T) {
 		BaseURL:              "https://api.openai.com/v1",
 		Model:                "gpt-5.4",
 		ModelReasoningEffort: "xhigh",
+		ModelContextWindow:   "128000",
 		APIKey:               "sk-switch-1234567890",
 	})
 	if err != nil {
@@ -176,8 +177,37 @@ func TestCreateAndSwitchAPIProfile(t *testing.T) {
 	if !strings.Contains(string(configRaw), "https://api.openai.com/v1") {
 		t.Fatalf("switched config.toml does not contain expected base url: %s", string(configRaw))
 	}
+	if !strings.Contains(string(configRaw), "model_context_window = 128000") {
+		t.Fatalf("switched config.toml does not contain expected context window: %s", string(configRaw))
+	}
+	if !strings.Contains(string(configRaw), "model_auto_compact_token_limit = 115200") {
+		t.Fatalf("switched config.toml does not contain expected compact limit: %s", string(configRaw))
+	}
 	if state.Current.Type != ProfileTypeAPI {
 		t.Fatalf("expected current type api after switch, got %s", state.Current.Type)
+	}
+}
+
+func TestGetAPIProfileInputDefaultsMissingModelContextWindow(t *testing.T) {
+	service := newTestService(t)
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := strings.Replace(mustReadSample(t, "api", "config.toml"), "model_context_window = 1000000\n", "", 1)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	input, err := service.GetAPIProfileInput(snapshot.Meta.ID)
+	if err != nil {
+		t.Fatalf("GetAPIProfileInput returned error: %v", err)
+	}
+	if input.ModelContextWindow != defaultAPIModelContextWindow {
+		t.Fatalf("expected default context window %s, got %s", defaultAPIModelContextWindow, input.ModelContextWindow)
 	}
 }
 

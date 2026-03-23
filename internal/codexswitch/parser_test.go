@@ -154,6 +154,7 @@ func TestBuildAPIProfileFromTemplate(t *testing.T) {
 		BaseURL:              "https://api.openai.com/v1",
 		Model:                "gpt-5.4",
 		ModelReasoningEffort: "xhigh",
+		ModelContextWindow:   "128000",
 		APIKey:               "sk-test-1234567890",
 	})
 	if err != nil {
@@ -165,6 +166,12 @@ func TestBuildAPIProfileFromTemplate(t *testing.T) {
 	}
 	if !strings.Contains(snapshot.ConfigRaw, "base_url = \"https://api.openai.com/v1\"") {
 		t.Fatalf("config template not rendered correctly: %s", snapshot.ConfigRaw)
+	}
+	if !strings.Contains(snapshot.ConfigRaw, "model_context_window = 128000") {
+		t.Fatalf("expected model_context_window to be rendered, got %s", snapshot.ConfigRaw)
+	}
+	if !strings.Contains(snapshot.ConfigRaw, "model_auto_compact_token_limit = 115200") {
+		t.Fatalf("expected model_auto_compact_token_limit to follow context window, got %s", snapshot.ConfigRaw)
 	}
 	if !strings.Contains(snapshot.AuthRaw, "sk-test-1234567890") {
 		t.Fatalf("auth template not rendered correctly: %s", snapshot.AuthRaw)

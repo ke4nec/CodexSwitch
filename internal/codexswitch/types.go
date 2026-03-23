@@ -100,6 +100,7 @@ type APIProfileInput struct {
 	BaseURL              string `json:"baseURL"`
 	Model                string `json:"model"`
 	ModelReasoningEffort string `json:"modelReasoningEffort"`
+	ModelContextWindow   string `json:"modelContextWindow"`
 	APIKey               string `json:"apiKey"`
 }
 

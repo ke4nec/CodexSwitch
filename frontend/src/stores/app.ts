@@ -33,6 +33,7 @@ const defaultApiForm = (): APIProfileInput => ({
   baseURL: 'https://api.openai.com/v1',
   model: 'gpt-5.4',
   modelReasoningEffort: 'xhigh',
+  modelContextWindow: '1000000',
   apiKey: '',
 });
 
