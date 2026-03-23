@@ -2,7 +2,15 @@ import { defineStore } from 'pinia';
 
 import { runtimeMessageMarkers, translate } from '../i18n';
 import { backend } from '../lib/backend';
-import type { APIProfileInput, AppState, ProfileMeta } from '../types';
+import type {
+  APIProfileInput,
+  AppState,
+  ProfileMeta,
+  ProfileSortKey,
+  ProfileSortState,
+  RateLimitWindow,
+  SortDirection,
+} from '../types';
 
 type ApiDialogMode = 'create' | 'edit';
 type ConfirmAction = 'switch' | 'delete';
@@ -29,33 +37,81 @@ const defaultApiForm = (): APIProfileInput => ({
 });
 
 const activeOfficialProfileRefreshIntervalMs = 5 * 60 * 1000;
+const defaultProfileSort: ProfileSortState = {
+  key: 'updatedAt',
+  direction: 'desc',
+};
+
+const defaultSortDirectionByKey: Record<ProfileSortKey, SortDirection> = {
+  usage5h: 'desc',
+  usageWeekly: 'desc',
+  latency: 'asc',
+  updatedAt: 'desc',
+};
 
 let activeOfficialProfileRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
-function profileLatencySortBucket(profile: ProfileMeta) {
-  const latencyMs = profile.latencyTest.latencyMs;
-  if (profile.latencyTest.status !== 'success' || typeof latencyMs !== 'number' || latencyMs <= 0) {
-    return 2;
+function getRemainingUsagePercent(window?: RateLimitWindow) {
+  if (!window || typeof window.usedPercent !== 'number' || !Number.isFinite(window.usedPercent)) {
+    return null;
   }
-  return profile.latencyTest.available ? 0 : 1;
+
+  return Math.max(0, 100 - window.usedPercent);
 }
 
-function sortProfilesForDisplay(profiles: ProfileMeta[]) {
+function getProfileLatencyMs(profile: ProfileMeta) {
+  const latencyMs = profile.latencyTest.latencyMs;
+  if (profile.latencyTest.status !== 'success' || typeof latencyMs !== 'number' || latencyMs <= 0) {
+    return null;
+  }
+
+  return latencyMs;
+}
+
+function getProfileUpdatedAtTimestamp(profile: ProfileMeta) {
+  const timestamp = new Date(profile.updatedAt).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function getProfileSortValue(profile: ProfileMeta, key: ProfileSortKey) {
+  switch (key) {
+    case 'usage5h':
+      return getRemainingUsagePercent(profile.rateLimits.primary);
+    case 'usageWeekly':
+      return getRemainingUsagePercent(profile.rateLimits.secondary);
+    case 'latency':
+      return getProfileLatencyMs(profile);
+    case 'updatedAt':
+      return getProfileUpdatedAtTimestamp(profile);
+    default:
+      return null;
+  }
+}
+
+function compareNullableNumbers(left: number | null, right: number | null, direction: SortDirection) {
+  const leftMissing = left == null || Number.isNaN(left);
+  const rightMissing = right == null || Number.isNaN(right);
+
+  if (leftMissing || rightMissing) {
+    if (leftMissing && rightMissing) {
+      return 0;
+    }
+
+    return leftMissing ? 1 : -1;
+  }
+
+  return direction === 'asc' ? left - right : right - left;
+}
+
+function sortProfilesForDisplay(profiles: ProfileMeta[], sortState: ProfileSortState) {
   return profiles
     .map((profile, index) => ({ profile, index }))
     .sort((left, right) => {
-      const leftBucket = profileLatencySortBucket(left.profile);
-      const rightBucket = profileLatencySortBucket(right.profile);
-      if (leftBucket !== rightBucket) {
-        return leftBucket - rightBucket;
-      }
-
-      if (leftBucket < 2) {
-        const leftLatency = left.profile.latencyTest.latencyMs ?? Number.MAX_SAFE_INTEGER;
-        const rightLatency = right.profile.latencyTest.latencyMs ?? Number.MAX_SAFE_INTEGER;
-        if (leftLatency !== rightLatency) {
-          return leftLatency - rightLatency;
-        }
+      const leftValue = getProfileSortValue(left.profile, sortState.key);
+      const rightValue = getProfileSortValue(right.profile, sortState.key);
+      const comparison = compareNullableNumbers(leftValue, rightValue, sortState.direction);
+      if (comparison !== 0) {
+        return comparison;
       }
 
       return left.index - right.index;
@@ -72,6 +128,7 @@ export const useAppStore = defineStore('app', {
     testingAllLatency: false,
     refreshingProfileIds: [] as string[],
     testingLatencyProfileIds: [] as string[],
+    profileSort: { ...defaultProfileSort } as ProfileSortState,
     snackbar: {
       show: false,
       text: '',
@@ -99,7 +156,7 @@ export const useAppStore = defineStore('app', {
   }),
 
   getters: {
-    profiles: (state) => sortProfilesForDisplay(state.appState.profiles),
+    profiles: (state) => sortProfilesForDisplay(state.appState.profiles, state.profileSort),
     current: (state) => state.appState.current,
     settings: (state) => state.appState.settings,
     officialProfileIds: (state) =>
@@ -113,6 +170,21 @@ export const useAppStore = defineStore('app', {
   },
 
   actions: {
+    toggleProfileSort(key: ProfileSortKey) {
+      if (this.profileSort.key === key) {
+        this.profileSort = {
+          key,
+          direction: this.profileSort.direction === 'asc' ? 'desc' : 'asc',
+        };
+        return;
+      }
+
+      this.profileSort = {
+        key,
+        direction: defaultSortDirectionByKey[key],
+      };
+    },
+
     notify(text: string, color: 'success' | 'error' | 'warning' = 'success') {
       this.snackbar = {
         show: true,

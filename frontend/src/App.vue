@@ -157,12 +157,52 @@
                       <th class="display-name-column">{{ t('profiles.headers.displayName') }}</th>
                       <th class="type-column">{{ t('profiles.headers.type') }}</th>
                       <th class="plan-column">{{ t('profiles.headers.planOrUrl') }}</th>
-                      <th class="usage-column">{{ t('profiles.headers.usage5h') }}</th>
-                      <th class="usage-column">{{ t('profiles.headers.usageWeekly') }}</th>
+                      <th class="usage-column sortable-column" :aria-sort="ariaSort('usage5h')">
+                        <button
+                          type="button"
+                          class="table-sort-button"
+                          :class="{ 'is-active': isSortedBy('usage5h') }"
+                          @click="store.toggleProfileSort('usage5h')"
+                        >
+                          <span class="table-sort-label">{{ t('profiles.headers.usage5h') }}</span>
+                          <span class="table-sort-indicator" aria-hidden="true">{{ sortIndicator('usage5h') }}</span>
+                        </button>
+                      </th>
+                      <th class="usage-column sortable-column" :aria-sort="ariaSort('usageWeekly')">
+                        <button
+                          type="button"
+                          class="table-sort-button"
+                          :class="{ 'is-active': isSortedBy('usageWeekly') }"
+                          @click="store.toggleProfileSort('usageWeekly')"
+                        >
+                          <span class="table-sort-label">{{ t('profiles.headers.usageWeekly') }}</span>
+                          <span class="table-sort-indicator" aria-hidden="true">{{ sortIndicator('usageWeekly') }}</span>
+                        </button>
+                      </th>
                       <th class="model-column">{{ t('profiles.headers.model') }}</th>
                       <th class="status-column">{{ t('profiles.headers.status') }}</th>
-                      <th class="latency-column">{{ t('profiles.headers.latency') }}</th>
-                      <th class="updated-column">{{ t('profiles.headers.updatedAt') }}</th>
+                      <th class="latency-column sortable-column" :aria-sort="ariaSort('latency')">
+                        <button
+                          type="button"
+                          class="table-sort-button"
+                          :class="{ 'is-active': isSortedBy('latency') }"
+                          @click="store.toggleProfileSort('latency')"
+                        >
+                          <span class="table-sort-label">{{ t('profiles.headers.latency') }}</span>
+                          <span class="table-sort-indicator" aria-hidden="true">{{ sortIndicator('latency') }}</span>
+                        </button>
+                      </th>
+                      <th class="updated-column sortable-column" :aria-sort="ariaSort('updatedAt')">
+                        <button
+                          type="button"
+                          class="table-sort-button"
+                          :class="{ 'is-active': isSortedBy('updatedAt') }"
+                          @click="store.toggleProfileSort('updatedAt')"
+                        >
+                          <span class="table-sort-label">{{ t('profiles.headers.updatedAt') }}</span>
+                          <span class="table-sort-indicator" aria-hidden="true">{{ sortIndicator('updatedAt') }}</span>
+                        </button>
+                      </th>
                       <th class="actions-column">{{ t('profiles.headers.actions') }}</th>
                     </tr>
                   </thead>
@@ -383,7 +423,7 @@ import ConfirmDialog from './components/ConfirmDialog.vue';
 import SettingsDialog from './components/SettingsDialog.vue';
 import { useI18n } from './i18n';
 import { useAppStore } from './stores/app';
-import type { ProfileMeta, RateLimitWindow } from './types';
+import type { ProfileMeta, ProfileSortKey, RateLimitWindow } from './types';
 
 const EMPTY_VALUE = '-';
 
@@ -395,6 +435,7 @@ const {
   latencyProfileIds,
   loading,
   officialProfileIds,
+  profileSort,
   profiles,
   refreshingProfileIds,
   testingAllLatency,
@@ -484,6 +525,26 @@ function syncProfilesTableScroll() {
   }
 
   profilesTableHeadRef.value.scrollLeft = profilesTableBodyRef.value.scrollLeft;
+}
+
+function isSortedBy(key: ProfileSortKey) {
+  return profileSort.value.key === key;
+}
+
+function sortIndicator(key: ProfileSortKey) {
+  if (!isSortedBy(key)) {
+    return '↕';
+  }
+
+  return profileSort.value.direction === 'asc' ? '↑' : '↓';
+}
+
+function ariaSort(key: ProfileSortKey) {
+  if (!isSortedBy(key)) {
+    return 'none';
+  }
+
+  return profileSort.value.direction === 'asc' ? 'ascending' : 'descending';
 }
 
 function statusColor(profile: ProfileMeta) {

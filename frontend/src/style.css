@@ -6,8 +6,8 @@
   --app-border: rgba(34, 73, 64, 0.14);
   --app-shadow: 0 18px 54px rgba(42, 55, 47, 0.08);
   --app-page-min-height: 712px;
-  --app-page-min-width: 1320px;
-  --app-table-min-width: 1260px;
+  --app-page-min-width: 1340px;
+  --app-table-min-width: 1280px;
   --app-overview-stats-width: 344px;
   --app-toolbar-height: clamp(52px, 7vh, 58px);
 }
@@ -551,6 +551,54 @@ body {
   padding-right: 8px !important;
 }
 
+.sortable-column {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+.table-sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.table-sort-button:hover,
+.table-sort-button.is-active {
+  color: #17352f;
+}
+
+.table-sort-button:focus-visible {
+  outline: 2px solid rgba(33, 74, 64, 0.32);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.table-sort-label {
+  min-width: 0;
+}
+
+.table-sort-indicator {
+  flex: 0 0 auto;
+  min-width: 12px;
+  color: rgba(82, 96, 112, 0.7);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.table-sort-button.is-active .table-sort-indicator {
+  color: #17352f;
+}
+
 .profiles-table-body tbody tr {
   transition: background-color 0.16s ease;
 }
@@ -588,7 +636,7 @@ body {
 }
 
 .col-updated {
-  width: 60px;
+  width: 82px;
 }
 
 .col-actions {
@@ -773,7 +821,7 @@ body {
   padding: 0 20px 18px !important;
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1340px) {
   .app-bar {
     flex: 0 0 auto;
     height: auto;

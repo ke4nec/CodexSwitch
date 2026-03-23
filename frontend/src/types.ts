@@ -1,6 +1,13 @@
 export type ProfileType = 'official' | 'api' | 'unknown';
 export type RateLimitFetchStatus = 'idle' | 'loading' | 'success' | 'stale' | 'error';
 export type LatencyTestStatus = 'idle' | 'success' | 'error';
+export type ProfileSortKey = 'usage5h' | 'usageWeekly' | 'latency' | 'updatedAt';
+export type SortDirection = 'asc' | 'desc';
+
+export interface ProfileSortState {
+  key: ProfileSortKey;
+  direction: SortDirection;
+}
 
 export interface AppSettings {
   codexHomePath: string;
