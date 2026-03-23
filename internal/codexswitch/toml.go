@@ -12,6 +12,7 @@ type parsedConfig struct {
 	ModelReasoningEffort string
 	ModelContextWindow   string
 	BaseURL              string
+	WireAPI              string
 	Values               map[string]string
 }
 
@@ -49,6 +50,10 @@ func parseConfigTOML(raw string) parsedConfig {
 			cfg.ModelReasoningEffort = parsedValue
 		case fullKey == "model_context_window":
 			cfg.ModelContextWindow = parsedValue
+		case fullKey == "wire_api" && cfg.WireAPI == "":
+			cfg.WireAPI = parsedValue
+		case strings.HasSuffix(fullKey, ".wire_api") && cfg.WireAPI == "":
+			cfg.WireAPI = parsedValue
 		case fullKey == "base_url" && cfg.BaseURL == "":
 			cfg.BaseURL = parsedValue
 		case strings.HasSuffix(fullKey, ".base_url") && cfg.BaseURL == "":

@@ -1,7 +1,9 @@
 package codexswitch
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -374,17 +376,30 @@ base_url = "%s/backend-api"
 }
 
 func TestRefreshAPILatencyTests(t *testing.T) {
+	var (
+		requestMethod string
+		requestBody   map[string]any
+	)
+
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v1/models" {
+		if request.URL.Path != "/v1/responses" {
 			writer.WriteHeader(http.StatusNotFound)
 			return
 		}
+		requestMethod = request.Method
 		if request.Header.Get("Authorization") != "Bearer sk-test-public-sample-key-0001" {
 			writer.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body failed: %v", err)
+		}
+		if err := json.Unmarshal(body, &requestBody); err != nil {
+			t.Fatalf("unmarshal request body failed: %v", err)
+		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"data":[{"id":"gpt-5.4"}]}`))
+		_, _ = writer.Write([]byte(`{"id":"resp_123","status":"completed","output_text":"hello"}`))
 	}))
 	defer server.Close()
 
@@ -432,13 +447,35 @@ base_url = "%s/v1"
 	if refreshed.LatencyTest.LatencyMs == nil || *refreshed.LatencyTest.LatencyMs <= 0 {
 		t.Fatalf("expected latency ms to be recorded, got %+v", refreshed.LatencyTest)
 	}
+	if requestMethod != http.MethodPost {
+		t.Fatalf("expected POST request, got %s", requestMethod)
+	}
+	if got := strings.TrimSpace(fmt.Sprintf("%v", requestBody["model"])); got != "gpt-5.4" {
+		t.Fatalf("expected model gpt-5.4, got %+v", requestBody["model"])
+	}
+	if got := strings.TrimSpace(fmt.Sprintf("%v", requestBody["input"])); got != latencyTestPrompt {
+		t.Fatalf("expected input %q, got %+v", latencyTestPrompt, requestBody["input"])
+	}
 }
 
 func TestRefreshAPILatencyTestsUnauthorized(t *testing.T) {
+	var (
+		requestMethod string
+		requestBody   map[string]any
+	)
+
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v1/models" {
+		if request.URL.Path != "/v1/responses" {
 			writer.WriteHeader(http.StatusNotFound)
 			return
+		}
+		requestMethod = request.Method
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read request body failed: %v", err)
+		}
+		if err := json.Unmarshal(body, &requestBody); err != nil {
+			t.Fatalf("unmarshal request body failed: %v", err)
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusUnauthorized)
@@ -492,6 +529,12 @@ base_url = "%s/v1"
 	}
 	if !strings.Contains(refreshed.LatencyTest.ErrorMessage, "Incorrect API key provided") {
 		t.Fatalf("expected unauthorized message, got %s", refreshed.LatencyTest.ErrorMessage)
+	}
+	if requestMethod != http.MethodPost {
+		t.Fatalf("expected POST request, got %s", requestMethod)
+	}
+	if got := strings.TrimSpace(fmt.Sprintf("%v", requestBody["input"])); got != latencyTestPrompt {
+		t.Fatalf("expected input %q, got %+v", latencyTestPrompt, requestBody["input"])
 	}
 }
 
