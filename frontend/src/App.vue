@@ -227,7 +227,7 @@
                     <tr
                       v-for="profile in profiles"
                       :key="profile.id"
-                      :class="{ 'is-active-row': profile.isActive }"
+                      :class="{ 'is-active-row': profile.isActive, 'is-disabled-row': profile.disabled }"
                     >
                       <td class="display-name-column">
                         <div class="primary-cell">
@@ -344,7 +344,7 @@
                             density="compact"
                             variant="text"
                             class="row-action-btn"
-                            :disabled="acting"
+                            :disabled="acting || profile.disabled"
                             @click="store.askSwitch(profile.id)"
                           >
                             {{ t('profiles.actions.switch') }}
@@ -356,7 +356,7 @@
                             variant="text"
                             class="row-action-btn"
                             :loading="isProfileLatencyTesting(profile.id)"
-                            :disabled="acting || isProfileLatencyTesting(profile.id)"
+                            :disabled="acting || profile.disabled || isProfileLatencyTesting(profile.id)"
                             @click="store.testProfileLatency(profile)"
                           >
                             {{ t('profiles.actions.test') }}
@@ -368,7 +368,7 @@
                             variant="text"
                             class="row-action-btn"
                             :loading="isProfileRefreshing(profile.id)"
-                            :disabled="acting || isProfileRefreshing(profile.id)"
+                            :disabled="acting || profile.disabled || isProfileRefreshing(profile.id)"
                             @click="store.refreshProfileRateLimit(profile)"
                           >
                             {{ t('profiles.actions.refresh') }}
@@ -394,6 +394,17 @@
                             @click="store.askDelete(profile.id)"
                           >
                             {{ t('profiles.actions.delete') }}
+                          </v-btn>
+                          <v-btn
+                            size="small"
+                            density="compact"
+                            variant="text"
+                            class="row-action-btn"
+                            :color="profile.disabled ? 'primary' : 'warning'"
+                            :disabled="acting"
+                            @click="store.toggleProfileDisabled(profile)"
+                          >
+                            {{ profile.disabled ? t('profiles.actions.enable') : t('profiles.actions.disable') }}
                           </v-btn>
                         </div>
                       </td>
@@ -577,6 +588,9 @@ function ariaSort(key: ProfileSortKey) {
 }
 
 function statusColor(profile: ProfileMeta) {
+  if (profile.disabled) {
+    return 'default';
+  }
   if (!profile.isValid) {
     return 'warning';
   }
@@ -587,6 +601,9 @@ function statusColor(profile: ProfileMeta) {
 }
 
 function statusText(profile: ProfileMeta) {
+  if (profile.disabled) {
+    return t('profiles.status.disabled');
+  }
   if (!profile.isValid) {
     return t('profiles.status.invalid');
   }

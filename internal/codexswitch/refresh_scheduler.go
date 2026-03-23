@@ -31,6 +31,9 @@ func (s *Service) RefreshActiveOfficialProfile() (string, bool, error) {
 	if err != nil {
 		return activeID, false, fmt.Errorf("读取当前激活官方配置失败: %w", err)
 	}
+	if stored.Meta.Disabled {
+		return activeID, false, nil
+	}
 
 	updated, refreshErr := s.refreshProfileRateLimit(stored)
 	if refreshErr != nil {

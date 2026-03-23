@@ -184,12 +184,16 @@ export const useAppStore = defineStore('app', {
     current: (state) => state.appState.current,
     settings: (state) => state.appState.settings,
     officialProfileIds: (state) =>
-      state.appState.profiles.filter((profile) => profile.type === 'official').map((profile) => profile.id),
+      state.appState.profiles
+        .filter((profile) => profile.type === 'official' && !profile.disabled)
+        .map((profile) => profile.id),
     apiProfileIds: (state) =>
-      state.appState.profiles.filter((profile) => profile.type === 'api').map((profile) => profile.id),
+      state.appState.profiles
+        .filter((profile) => profile.type === 'api' && !profile.disabled)
+        .map((profile) => profile.id),
     latencyProfileIds: (state) =>
       state.appState.profiles
-        .filter((profile) => profile.type === 'official' || profile.type === 'api')
+        .filter((profile) => (profile.type === 'official' || profile.type === 'api') && !profile.disabled)
         .map((profile) => profile.id),
   },
 
@@ -370,6 +374,9 @@ export const useAppStore = defineStore('app', {
       if (profile.type !== 'official') {
         return;
       }
+      if (profile.disabled) {
+        return;
+      }
       if (this.refreshingProfileIds.includes(profile.id)) {
         return;
       }
@@ -393,7 +400,7 @@ export const useAppStore = defineStore('app', {
 
     async refreshActiveOfficialProfile(showSuccess = false) {
       const activeOfficialProfile = this.appState.profiles.find(
-        (profile) => profile.isActive && profile.type === 'official',
+        (profile) => profile.isActive && profile.type === 'official' && !profile.disabled,
       );
       if (!activeOfficialProfile) {
         return;
@@ -411,7 +418,7 @@ export const useAppStore = defineStore('app', {
 
     async refreshApiProfileAvailability(showSuccess = false) {
       const targets = this.appState.profiles.filter(
-        (profile) => profile.type === 'api' && !this.testingLatencyProfileIds.includes(profile.id),
+        (profile) => profile.type === 'api' && !profile.disabled && !this.testingLatencyProfileIds.includes(profile.id),
       );
 
       if (targets.length === 0) {
@@ -435,6 +442,7 @@ export const useAppStore = defineStore('app', {
       const targets = this.appState.profiles.filter(
         (profile) =>
           (profile.type === 'official' || profile.type === 'api') &&
+          !profile.disabled &&
           !this.testingLatencyProfileIds.includes(profile.id),
       );
 
@@ -470,6 +478,9 @@ export const useAppStore = defineStore('app', {
       if (profile.type !== 'api' && profile.type !== 'official') {
         return;
       }
+      if (profile.disabled) {
+        return;
+      }
       if (this.testingLatencyProfileIds.includes(profile.id)) {
         return;
       }
@@ -493,6 +504,21 @@ export const useAppStore = defineStore('app', {
       } finally {
         this.testingLatencyProfileIds = this.testingLatencyProfileIds.filter((id) => id !== profile.id);
       }
+    },
+
+    async toggleProfileDisabled(profile: ProfileMeta) {
+      await this.runAction(async () => {
+        this.appState = await backend.setProfileDisabled(profile.id, !profile.disabled);
+        this.notify(
+          profile.disabled
+            ? translate('notifications.profileEnabled', {
+                name: profile.displayName || translate('common.account'),
+              })
+            : translate('notifications.profileDisabled', {
+                name: profile.displayName || translate('common.account'),
+              }),
+        );
+      });
     },
 
     async runAction(action: () => Promise<void>, notifyOnError = true, trackActing = true) {

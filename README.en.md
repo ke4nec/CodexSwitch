@@ -38,7 +38,6 @@
 
 <p align="center">
   <a href="https://github.com/ke4nec/CodexSwitch/releases">Download</a> ·
-  <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
 CodexSwitch is a cross-platform desktop application for managing multiple Codex configurations.

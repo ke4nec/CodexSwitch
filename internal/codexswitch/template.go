@@ -143,6 +143,7 @@ func preserveStoredFields(next *ProfileMeta, existing *ProfileMeta, now time.Tim
 		return
 	}
 
+	next.Disabled = existing.Disabled
 	next.CreatedAt = existing.CreatedAt
 	next.UpdatedAt = now.UTC().Format(time.RFC3339)
 	if next.LastRateLimitFetchAt == "" {

@@ -281,6 +281,7 @@ func (s *Service) applyOfficialSharedConfig(snapshot *profileSnapshot) (*profile
 		return nil, fmt.Errorf("应用官方共享 config.toml 失败: %w", err)
 	}
 	rebuilt.Meta.IsActive = snapshot.Meta.IsActive
+	rebuilt.Meta.Disabled = snapshot.Meta.Disabled
 	rebuilt.Meta.LastRateLimitFetchAt = snapshot.Meta.LastRateLimitFetchAt
 	rebuilt.Meta.RateLimits = snapshot.Meta.RateLimits
 	rebuilt.Meta.LatencyTest = snapshot.Meta.LatencyTest

@@ -137,6 +137,7 @@ func (s *Service) UpdateAPIProfile(id string, input APIProfileInput) (AppState, 
 	}
 	snapshot.Meta.Source = existing.Meta.Source
 	snapshot.Meta.IsActive = false
+	snapshot.Meta.Disabled = existing.Meta.Disabled
 
 	if err := s.saveProfileSnapshot(snapshot); err != nil {
 		return AppState{}, err
@@ -200,6 +201,9 @@ func (s *Service) SwitchProfile(id string) (AppState, error) {
 	if err != nil {
 		return AppState{}, fmt.Errorf("读取目标配置失败: %w", err)
 	}
+	if target.Meta.Disabled {
+		return AppState{}, fmt.Errorf("该配置已被禁用，请先启用后再切换")
+	}
 
 	current, currentSnapshot := s.scanCurrentProfile(settings.CodexHomePath)
 	if currentSnapshot != nil && currentSnapshot.Meta.IsValid && currentSnapshot.Meta.ID != target.Meta.ID {
@@ -217,6 +221,27 @@ func (s *Service) SwitchProfile(id string) (AppState, error) {
 	}
 
 	return s.syncAndBuildState(true)
+}
+
+func (s *Service) SetProfileDisabled(id string, disabled bool) (AppState, error) {
+	profile, err := s.loadProfile(id)
+	if err != nil {
+		return AppState{}, fmt.Errorf("读取配置失败: %w", err)
+	}
+
+	if profile.Meta.Disabled == disabled {
+		return s.syncAndBuildState(false)
+	}
+
+	profile.Meta.Disabled = disabled
+	profile.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	metaForDisk := profile.Meta
+	metaForDisk.LatencyTest.History = nil
+	if err := safeWriteJSON(filepath.Join(s.profileDir(id), "meta.json"), metaForDisk); err != nil {
+		return AppState{}, fmt.Errorf("保存配置启用状态失败: %w", err)
+	}
+
+	return s.syncAndBuildState(false)
 }
 
 func (s *Service) DeleteProfile(id string) (AppState, error) {
@@ -256,6 +281,9 @@ func (s *Service) RefreshRateLimits(ids []string) (AppState, error) {
 
 	for _, meta := range profiles {
 		if meta.Type != ProfileTypeOfficial {
+			continue
+		}
+		if meta.Disabled {
 			continue
 		}
 		if len(targetSet) > 0 && !targetSet[meta.ID] {
@@ -316,6 +344,9 @@ func (s *Service) refreshAPILatencyTests(ids []string, writeMode latencyHistoryW
 
 	for _, meta := range profiles {
 		if meta.Type != ProfileTypeAPI && meta.Type != ProfileTypeOfficial {
+			continue
+		}
+		if meta.Disabled {
 			continue
 		}
 		if len(targetSet) > 0 && !targetSet[meta.ID] {

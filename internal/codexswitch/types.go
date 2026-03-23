@@ -72,6 +72,7 @@ type ProfileMeta struct {
 	Type                 ProfileType      `json:"type"`
 	DisplayName          string           `json:"displayName"`
 	StableKeyHash        string           `json:"stableKeyHash"`
+	Disabled             bool             `json:"disabled,omitempty"`
 	Email                string           `json:"email,omitempty"`
 	EmailVerified        bool             `json:"emailVerified"`
 	PlanType             string           `json:"planType,omitempty"`

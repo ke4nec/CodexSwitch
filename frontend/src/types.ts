@@ -55,6 +55,7 @@ export interface ProfileMeta {
   type: ProfileType;
   displayName: string;
   stableKeyHash: string;
+  disabled: boolean;
   email?: string;
   emailVerified: boolean;
   planType?: string;

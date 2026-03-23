@@ -38,7 +38,6 @@
 
 <p align="center">
   <a href="https://github.com/ke4nec/CodexSwitch/releases">下载发布版</a> ·
-  <a href="./CONTRIBUTING.md">参与贡献</a>
 </p>
 
 CodexSwitch 是一个用于管理多个 Codex 配置的跨平台桌面工具。

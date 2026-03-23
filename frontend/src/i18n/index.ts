@@ -72,6 +72,7 @@ const messages: Record<AppLocale, MessageTree> = {
       },
       status: {
         invalid: '异常',
+        disabled: '禁用',
         active: '激活',
         ready: '就绪',
       },
@@ -111,6 +112,8 @@ const messages: Record<AppLocale, MessageTree> = {
         refresh: '刷新',
         edit: '编辑',
         delete: '删除',
+        enable: '启用',
+        disable: '禁用',
       },
     },
     dialogs: {
@@ -163,6 +166,8 @@ const messages: Record<AppLocale, MessageTree> = {
       latencyTested: '{name} 延迟已测试',
       allLatencyTested: '全部账号延迟已测试',
       apiAvailabilityRefreshed: 'API 可用性已自动刷新',
+      profileEnabled: '{name} 已启用',
+      profileDisabled: '{name} 已禁用',
     },
     runtime: {
       wailsNotReady: 'Wails runtime 未就绪，请通过 Wails 启动应用',
@@ -231,6 +236,7 @@ const messages: Record<AppLocale, MessageTree> = {
       },
       status: {
         invalid: 'Invalid',
+        disabled: 'Disabled',
         active: 'Active',
         ready: 'Ready',
       },
@@ -270,6 +276,8 @@ const messages: Record<AppLocale, MessageTree> = {
         refresh: 'Refresh',
         edit: 'Edit',
         delete: 'Delete',
+        enable: 'Enable',
+        disable: 'Disable',
       },
     },
     dialogs: {
@@ -322,6 +330,8 @@ const messages: Record<AppLocale, MessageTree> = {
       latencyTested: '{name} latency tested',
       allLatencyTested: 'All account latency tests completed',
       apiAvailabilityRefreshed: 'API availability refreshed',
+      profileEnabled: '{name} enabled',
+      profileDisabled: '{name} disabled',
     },
     runtime: {
       wailsNotReady: 'Wails runtime is not ready. Please launch the app through Wails.',

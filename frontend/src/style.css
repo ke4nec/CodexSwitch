@@ -6,8 +6,8 @@
   --app-border: rgba(34, 73, 64, 0.14);
   --app-shadow: 0 18px 54px rgba(42, 55, 47, 0.08);
   --app-page-min-height: 712px;
-  --app-page-min-width: 1340px;
-  --app-table-min-width: 1280px;
+  --app-page-min-width: 1460px;
+  --app-table-min-width: 1360px;
   --app-overview-stats-width: 344px;
   --app-toolbar-height: clamp(52px, 7vh, 58px);
 }
@@ -640,7 +640,7 @@ body {
 }
 
 .col-actions {
-  width: 280px;
+  width: 320px;
 }
 
 .display-name-column,
@@ -672,6 +672,14 @@ body {
 
 .is-active-row .updated-time {
   color: #365b53;
+}
+
+.is-disabled-row {
+  opacity: 0.72;
+}
+
+.is-disabled-row td {
+  background: transparent !important;
 }
 
 .primary-cell {
@@ -808,7 +816,7 @@ body {
   flex-wrap: nowrap;
   gap: 4px;
   width: 100%;
-  min-width: 268px;
+  min-width: 320px;
 }
 
 .row-action-btn {
@@ -888,7 +896,7 @@ body {
   padding: 0 20px 18px !important;
 }
 
-@media (max-width: 1340px) {
+@media (max-width: 1460px) {
   .app-bar {
     flex: 0 0 auto;
     height: auto;

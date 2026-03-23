@@ -113,6 +113,12 @@ func (a *App) DeleteProfile(id string) (codexswitch.AppState, error) {
 	})
 }
 
+func (a *App) SetProfileDisabled(id string, disabled bool) (codexswitch.AppState, error) {
+	return withAppLock(&a.mu, func() (codexswitch.AppState, error) {
+		return a.service.SetProfileDisabled(id, disabled)
+	})
+}
+
 func (a *App) RefreshRateLimits(ids []string) (codexswitch.AppState, error) {
 	return withAppLock(&a.mu, func() (codexswitch.AppState, error) {
 		return a.service.RefreshRateLimits(ids)

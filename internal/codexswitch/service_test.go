@@ -191,6 +191,47 @@ func TestCreateAndSwitchAPIProfile(t *testing.T) {
 	}
 }
 
+func TestSetProfileDisabledPreventsSwitch(t *testing.T) {
+	service := newTestService(t)
+	codexHome := prepareCodexHome(t, "codex")
+	if err := service.saveSettings(AppSettings{CodexHomePath: codexHome}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+	if _, err := service.GetAppState(); err != nil {
+		t.Fatalf("GetAppState returned error: %v", err)
+	}
+
+	state, err := service.CreateAPIProfile(APIProfileInput{
+		BaseURL:              "https://api.openai.com/v1",
+		Model:                "gpt-5.4",
+		ModelReasoningEffort: "xhigh",
+		ModelContextWindow:   "128000",
+		APIKey:               "sk-disabled-1234567890",
+	})
+	if err != nil {
+		t.Fatalf("CreateAPIProfile returned error: %v", err)
+	}
+
+	apiProfile := findFirstProfileByType(state.Profiles, ProfileTypeAPI)
+	if apiProfile.ID == "" {
+		t.Fatal("expected created api profile")
+	}
+
+	state, err = service.SetProfileDisabled(apiProfile.ID, true)
+	if err != nil {
+		t.Fatalf("SetProfileDisabled returned error: %v", err)
+	}
+
+	disabledProfile := findProfileByID(state.Profiles, apiProfile.ID)
+	if !disabledProfile.Disabled {
+		t.Fatalf("expected api profile to be disabled, got %+v", disabledProfile)
+	}
+
+	if _, err := service.SwitchProfile(apiProfile.ID); err == nil || !strings.Contains(err.Error(), "已被禁用") {
+		t.Fatalf("expected disabled profile switch to be rejected, got %v", err)
+	}
+}
+
 func TestGetAPIProfileInputDefaultsMissingModelContextWindow(t *testing.T) {
 	service := newTestService(t)
 
@@ -376,6 +417,53 @@ base_url = "%s/backend-api"
 	}
 }
 
+func TestRefreshRateLimitsSkipsDisabledOfficialProfile(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount++
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"plan_type":"pro"}`))
+	}))
+	defer server.Close()
+
+	service := newTestServiceWithHTTP(t, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "codex", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/backend-api"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceImportedCurrent, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	snapshot.Meta.Disabled = true
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshRateLimits([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshRateLimits returned error: %v", err)
+	}
+
+	refreshed := findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if !refreshed.Disabled {
+		t.Fatalf("expected profile to remain disabled, got %+v", refreshed)
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected disabled official profile to skip rate limit refresh, got %d requests", requestCount)
+	}
+	if refreshed.RateLimits.Status != RateLimitStatusIdle {
+		t.Fatalf("expected disabled profile rate limit status to remain idle, got %+v", refreshed.RateLimits)
+	}
+}
+
 func TestRefreshAPILatencyTests(t *testing.T) {
 	var (
 		probeRequestMethod      string
@@ -482,6 +570,52 @@ base_url = "%s/v1"
 	}
 	if got := strings.TrimSpace(fmt.Sprintf("%v", availabilityRequestBody["input"])); got != latencyTestPrompt {
 		t.Fatalf("expected input %q, got %+v", latencyTestPrompt, availabilityRequestBody["input"])
+	}
+}
+
+func TestRefreshAPILatencyTestsSkipsDisabledProfile(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount++
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	service := newTestServiceWithHTTP(t, server.Client())
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	snapshot.Meta.Disabled = true
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshAPILatencyTests returned error: %v", err)
+	}
+
+	refreshed := findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if !refreshed.Disabled {
+		t.Fatalf("expected profile to remain disabled, got %+v", refreshed)
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected disabled api profile to skip latency refresh, got %d requests", requestCount)
+	}
+	if refreshed.LatencyTest.Status != LatencyTestStatusIdle {
+		t.Fatalf("expected disabled profile latency status to remain idle, got %+v", refreshed.LatencyTest)
 	}
 }
 
@@ -1033,6 +1167,15 @@ func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) 
 func findProfileByID(profiles []ProfileMeta, id string) ProfileMeta {
 	for _, profile := range profiles {
 		if profile.ID == id {
+			return profile
+		}
+	}
+	return ProfileMeta{}
+}
+
+func findFirstProfileByType(profiles []ProfileMeta, profileType ProfileType) ProfileMeta {
+	for _, profile := range profiles {
+		if profile.Type == profileType {
 			return profile
 		}
 	}

@@ -16,7 +16,7 @@ import (
 var assets embed.FS
 
 const (
-	minPageWidth                = 1340
+	minPageWidth                = 1460
 	minPageHeight               = 712
 	minToolbarHeight            = 58
 	windowChromeWidthAllowance  = 20
