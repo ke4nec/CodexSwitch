@@ -750,6 +750,7 @@ body {
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-start;
+  justify-content: flex-end;
   gap: 2px;
   width: 100%;
   overflow: hidden;

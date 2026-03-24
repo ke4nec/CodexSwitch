@@ -345,15 +345,17 @@ export const useAppStore = defineStore('app', {
         return;
       }
 
+      const { action, profileId } = this.confirmDialog;
+      this.confirmDialog.open = false;
+
       await this.runAction(async () => {
-        if (this.confirmDialog.action === 'switch') {
-          this.appState = await backend.switchProfile(this.confirmDialog.profileId);
+        if (action === 'switch') {
+          this.appState = await backend.switchProfile(profileId);
           this.notify(translate('notifications.switched'));
         } else {
-          this.appState = await backend.deleteProfile(this.confirmDialog.profileId);
+          this.appState = await backend.deleteProfile(profileId);
           this.notify(translate('notifications.deleted'));
         }
-        this.confirmDialog.open = false;
       });
     },
 
