@@ -573,6 +573,66 @@ base_url = "%s/v1"
 	}
 }
 
+func TestRefreshAPILatencyTestsPreservesUpdatedAt(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/":
+			writer.WriteHeader(http.StatusNoContent)
+		case "/v1/responses":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"id":"resp_keep_updated_at","status":"completed","output_text":"ok"}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	nextNow := time.Date(2026, 3, 19, 15, 0, 0, 0, time.UTC)
+	service := newTestServiceWithConfigDirHTTPAndNow(t, t.TempDir(), server.Client(), func() time.Time {
+		current := nextNow
+		nextNow = nextNow.Add(time.Minute)
+		return current
+	})
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	originalUpdatedAt := snapshot.Meta.UpdatedAt
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.RefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("RefreshAPILatencyTests returned error: %v", err)
+	}
+
+	refreshed := findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if refreshed.ID == "" {
+		t.Fatal("expected refreshed api profile in state")
+	}
+	if refreshed.UpdatedAt != originalUpdatedAt {
+		t.Fatalf("expected latency refresh to preserve updatedAt %s, got %s", originalUpdatedAt, refreshed.UpdatedAt)
+	}
+	if refreshed.LatencyTest.CheckedAt == "" {
+		t.Fatalf("expected latency refresh to set checkedAt, got %+v", refreshed.LatencyTest)
+	}
+	if refreshed.LatencyTest.CheckedAt == originalUpdatedAt {
+		t.Fatalf("expected checkedAt to move forward independently from updatedAt, got %+v", refreshed.LatencyTest)
+	}
+}
+
 func TestRefreshAPILatencyTestsSkipsDisabledProfile(t *testing.T) {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -848,6 +908,66 @@ base_url = "https://api.openai.com/v1"
 	}
 	if !strings.Contains(refreshed.LatencyTest.History[0].ErrorMessage, "缺少可用 model") {
 		t.Fatalf("expected history error message to mention missing model, got %+v", refreshed.LatencyTest.History[0])
+	}
+}
+
+func TestAutoRefreshAPILatencyTestsPreservesUpdatedAt(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/":
+			writer.WriteHeader(http.StatusNoContent)
+		case "/v1/responses":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"id":"resp_auto_keep_updated_at","status":"completed","output_text":"ok"}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	nextNow := time.Date(2026, 3, 19, 16, 0, 0, 0, time.UTC)
+	service := newTestServiceWithConfigDirHTTPAndNow(t, t.TempDir(), server.Client(), func() time.Time {
+		current := nextNow
+		nextNow = nextNow.Add(time.Minute)
+		return current
+	})
+	if err := service.saveSettings(AppSettings{CodexHomePath: t.TempDir()}); err != nil {
+		t.Fatalf("saveSettings failed: %v", err)
+	}
+
+	authRaw := mustReadSample(t, "api", "auth.json")
+	configRaw := fmt.Sprintf(`model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+[model_providers.OpenAI]
+base_url = "%s/v1"
+`, server.URL)
+
+	snapshot, err := buildProfileSnapshot(authRaw, configRaw, profileSourceCreatedAPIForm, service.now())
+	if err != nil {
+		t.Fatalf("buildProfileSnapshot returned error: %v", err)
+	}
+	originalUpdatedAt := snapshot.Meta.UpdatedAt
+	if err := service.saveProfileSnapshot(snapshot); err != nil {
+		t.Fatalf("saveProfileSnapshot failed: %v", err)
+	}
+
+	state, err := service.AutoRefreshAPILatencyTests([]string{snapshot.Meta.ID})
+	if err != nil {
+		t.Fatalf("AutoRefreshAPILatencyTests returned error: %v", err)
+	}
+
+	refreshed := findProfileByID(state.Profiles, snapshot.Meta.ID)
+	if refreshed.ID == "" {
+		t.Fatal("expected refreshed api profile in state")
+	}
+	if refreshed.UpdatedAt != originalUpdatedAt {
+		t.Fatalf("expected auto latency refresh to preserve updatedAt %s, got %s", originalUpdatedAt, refreshed.UpdatedAt)
+	}
+	if refreshed.LatencyTest.CheckedAt == "" {
+		t.Fatalf("expected auto latency refresh to set checkedAt, got %+v", refreshed.LatencyTest)
+	}
+	if refreshed.LatencyTest.CheckedAt == originalUpdatedAt {
+		t.Fatalf("expected checkedAt to move forward independently from updatedAt, got %+v", refreshed.LatencyTest)
 	}
 }
 
@@ -1142,12 +1262,22 @@ func newTestServiceWithHTTP(t *testing.T, client *http.Client) *Service {
 
 func newTestServiceWithConfigDirAndHTTP(t *testing.T, appConfigDir string, client *http.Client) *Service {
 	t.Helper()
+	return newTestServiceWithConfigDirHTTPAndNow(t, appConfigDir, client, func() time.Time {
+		return time.Date(2026, 3, 19, 15, 0, 0, 0, time.UTC)
+	})
+}
+
+func newTestServiceWithConfigDirHTTPAndNow(
+	t *testing.T,
+	appConfigDir string,
+	client *http.Client,
+	now func() time.Time,
+) *Service {
+	t.Helper()
 	service, err := NewService(ServiceOptions{
 		AppConfigDir: appConfigDir,
 		HTTPClient:   client,
-		Now: func() time.Time {
-			return time.Date(2026, 3, 19, 15, 0, 0, 0, time.UTC)
-		},
+		Now:          now,
 	})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)

@@ -234,8 +234,9 @@ export const useAppStore = defineStore('app', {
       }
 
       await this.loadAppState(false);
-      void this.refreshActiveOfficialProfile(false);
-      void this.refreshApiProfileAvailability(false);
+      // 暂时停止启动时测试和刷新，等用户点击后再执行，避免启动时过多请求导致卡顿
+      // void this.refreshActiveOfficialProfile(false);
+      // void this.refreshApiProfileAvailability(false);
     },
 
     async loadAppState(showSuccess = false) {

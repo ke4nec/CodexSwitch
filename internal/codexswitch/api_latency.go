@@ -115,7 +115,6 @@ func (s *Service) refreshProfileLatencyTest(profile storedProfile) (storedProfil
 	}
 
 	s.logLatencyTestResult(profile, req, resp, profile.Meta.LatencyTest.LatencyMs, failureInfo)
-	profile.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	return profile, nil
 }
 

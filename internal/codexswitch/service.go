@@ -374,7 +374,6 @@ func (s *Service) refreshAPILatencyTests(ids []string, writeMode latencyHistoryW
 				ErrorMessage: err.Error(),
 				CheckedAt:    checkedAt,
 			}
-			updated.Meta.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		}
 		if meta.Type == ProfileTypeAPI {
 			if err := s.recordAPILatencyHistory(meta.ID, updated.Meta.LatencyTest, writeMode); err != nil {

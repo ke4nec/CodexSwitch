@@ -138,14 +138,20 @@ func preserveStoredFields(next *ProfileMeta, existing *ProfileMeta, now time.Tim
 	next.LatencyTest.History = trimLatencyHistoryEntries(next.LatencyTest.History)
 
 	if existing == nil {
-		next.CreatedAt = now.UTC().Format(time.RFC3339)
-		next.UpdatedAt = now.UTC().Format(time.RFC3339)
+		if strings.TrimSpace(next.CreatedAt) == "" {
+			next.CreatedAt = now.UTC().Format(time.RFC3339)
+		}
+		if strings.TrimSpace(next.UpdatedAt) == "" {
+			next.UpdatedAt = now.UTC().Format(time.RFC3339)
+		}
 		return
 	}
 
 	next.Disabled = existing.Disabled
 	next.CreatedAt = existing.CreatedAt
-	next.UpdatedAt = now.UTC().Format(time.RFC3339)
+	if strings.TrimSpace(next.UpdatedAt) == "" {
+		next.UpdatedAt = existing.UpdatedAt
+	}
 	if next.LastRateLimitFetchAt == "" {
 		next.LastRateLimitFetchAt = existing.LastRateLimitFetchAt
 	}
